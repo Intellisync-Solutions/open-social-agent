@@ -1,7 +1,7 @@
 ---
 title: Open Social Agent Architecture
 architecture_status: approved
-implementation_status: not_started
+implementation_status: partial
 version: 0.1
 owner: IntelliSync
 last_reviewed: 2026-08-10
@@ -65,7 +65,15 @@ would send, post, submit, or represent the user to a third party.
 
 ### Currently implemented
 
-- Governance and architecture documentation only
+- Governed pnpm/Turborepo workspace with deterministic governance validation
+- Next.js application shell with fail-closed Convex configuration
+- Convex Auth email/password boundary and protected onboarding route
+- Auth-scoped, resumable onboarding draft persistence
+- Shared Zod onboarding contracts that exclude provider secrets
+- Responsive eight-step onboarding interface through configuration review
+
+Provider secret storage, runner pairing, schedules, harness execution, history
+CRUD, approval, computer use, and publication receipts remain planned.
 
 ### Deferred
 

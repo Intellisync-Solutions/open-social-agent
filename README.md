@@ -1,7 +1,8 @@
 # Open Social Agent
 
-Open Social Agent is a proposed open-source, local-first social media workflow
-application. It will research within user-approved boundaries, compose in a
+Open Social Agent is an open-source, local-first social media workflow
+application. It is being delivered in evidence-backed slices and will research
+within user-approved boundaries, compose in a
 saved voice, prepare an exact destination in a user-selected isolated browser,
 and pause for approval immediately before posting.
 
@@ -29,7 +30,19 @@ computer-use guidance says sending or posting on a user's behalf should be
 confirmed at action time. The schedule prepares the work; it does not remove
 the user's control of the public action.
 
-## Proposed stack
+## Implemented foundation
+
+- governed pnpm/Turborepo workspace
+- Next.js App Router UI with Convex Auth
+- auth-scoped resumable eight-step onboarding
+- shared Zod contracts with no provider-secret field
+- deterministic governance, lint, type, test, build, and dry browser checks
+
+Runner, provider execution, schedules, history, and posting remain incomplete.
+See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
+implemented/planned boundary.
+
+## Approved stack
 
 - Next.js App Router, strict TypeScript, Tailwind CSS, shadcn/ui, Zod
 - Convex Auth and Convex durable data/scheduling

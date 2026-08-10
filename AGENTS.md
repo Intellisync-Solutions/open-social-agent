@@ -7,8 +7,8 @@ It lets an operator configure a destination, research policy, writing profile,
 model policy, browser, and schedule; creates evidence-backed drafts; and uses an
 isolated browser profile to prepare a post for explicit human approval.
 
-The repository is in architecture initialization. `BUILD_INIT.md` is a draft and
-product implementation must not begin until the owner approves it.
+Architecture version 0.1 is approved. Product implementation proceeds in small,
+documented slices that preserve the approval-at-post-time safety boundary.
 
 ## Instruction precedence
 
@@ -45,7 +45,7 @@ documentation before model, tool, reasoning, or computer-use changes.
 
 Historical records are evidence, not governing policy.
 
-## Seams to preserve after approval
+## Approved seams to preserve
 
 - `apps/web`: Next.js App Router UI and authenticated application boundary
 - `apps/runner`: local schedule claimant and isolated browser computer-use loop

@@ -4,16 +4,29 @@ Last verified: 2026-08-10
 
 ## Current truth
 
-No product runtime is committed yet. The repository contains the approved
-architecture package and implementation is underway in isolated local work.
+The first product runtime slice is implemented on the `codex/v1-scaffold`
+branch: a governed workspace, authenticated Next.js shell, shared onboarding
+contracts, and auth-scoped resumable onboarding persistence.
 
 `BUILD_INIT.md` has `architecture_status: approved` and
-`implementation_status: not_started`. Future contributors must not describe the
-proposed Next.js, Convex, provider, harness, runner, or browser layers as shipped.
+`implementation_status: partial`. Future contributors must not describe the
+provider secret store, harness, runner, scheduling, browser execution, history,
+approval, or receipt layers as shipped.
 
-## Proposed implementation seams
+## Implemented seams
 
-- `apps/web`: onboarding, settings, CRUD, run/approval/history UI
+- `apps/web`: authenticated landing surface and responsive eight-step onboarding
+- `packages/contracts`: versioned onboarding schemas and destination-origin rule
+- `convex`: Convex Auth tables plus one auth-scoped onboarding draft per user
+- `scripts/verify-governance.mjs`: deterministic authority/status validation
+
+The web application fails closed when its Convex URL is absent or invalid. The
+onboarding contract contains provider metadata and a redacted fingerprint field,
+but no provider secret field or transport.
+
+## Planned seams
+
+- `apps/web`: settings, CRUD, run/approval/history UI beyond onboarding
 - `apps/runner`: local due-run claimant and computer-use execution
 - `packages/contracts`: versioned cross-boundary schemas
 - `packages/harness`: policy, context, evidence, model, evaluation, approval
@@ -42,6 +55,6 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The first implementation slice is the governed application scaffold,
-authentication boundary, and deterministic governance check—without provider
-spend or social-browser execution.
+The next slice is the local runner pairing and encrypted provider-secret seam,
+followed by truthful capability tests. It must not send a key to Convex, a model,
+browser client code, or logs.

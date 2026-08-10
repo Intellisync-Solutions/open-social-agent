@@ -1,6 +1,6 @@
 # V1 Product Scope
 
-Status: proposed; requires architecture approval.
+Status: approved for architecture version 0.1 on 2026-08-10.
 
 ## Acceptance criteria
 
