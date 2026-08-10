@@ -1,6 +1,6 @@
 # ADR 0001: Local-first web application with a local browser runner
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-08-10
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0003: Capability-based providers with local-only secrets
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-08-10
 
 ## Context

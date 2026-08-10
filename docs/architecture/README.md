@@ -4,10 +4,10 @@ Last verified: 2026-08-10
 
 ## Current truth
 
-No product runtime is implemented. The repository contains only the governance
-and draft architecture package for owner review.
+No product runtime is committed yet. The repository contains the approved
+architecture package and implementation is underway in isolated local work.
 
-`BUILD_INIT.md` has `architecture_status: draft` and
+`BUILD_INIT.md` has `architecture_status: approved` and
 `implementation_status: not_started`. Future contributors must not describe the
 proposed Next.js, Convex, provider, harness, runner, or browser layers as shipped.
 
@@ -42,6 +42,6 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-Owner architecture approval. The first implementation slice should then be the
-governed monorepo scaffold, authentication boundary, and deterministic
-governance check—without provider spend or browser automation.
+The first implementation slice is the governed application scaffold,
+authentication boundary, and deterministic governance check—without provider
+spend or social-browser execution.

@@ -2,11 +2,11 @@
 
 Thank you for helping build Open Social Agent.
 
-## Architecture gate
+## Architecture authority
 
-The repository currently contains a draft architecture. Do not start product
-implementation until `BUILD_INIT.md` has `architecture_status: approved` and an
-approval record exists in `docs/history/`.
+Architecture version 0.1 is approved. Changes to a boundary recorded in
+`BUILD_INIT.md`, `SECURITY.md`, or an accepted ADR require owner review before
+implementation.
 
 ## Working agreement
 

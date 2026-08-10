@@ -1,6 +1,6 @@
 ---
 title: Open Social Agent Architecture
-architecture_status: draft
+architecture_status: approved
 implementation_status: not_started
 version: 0.1
 owner: IntelliSync
@@ -13,9 +13,10 @@ supersedes: null
 
 ## Approval status
 
-Architecture version 0.1 is a proposal. Product implementation must stop until
-the owner explicitly approves this document, including the V1 safety boundary,
-repository identity, and license choice.
+The owner approved architecture version 0.1, the
+`Intellisync-Solutions/open-social-agent` repository identity, Apache-2.0, and
+the one-operator self-hosted/approval-at-post-time V1 boundary on 2026-08-10.
+Implementation may proceed in documented, validated slices.
 
 ## 1. Product problem, users, and workflows
 
@@ -47,7 +48,7 @@ would send, post, submit, or represent the user to a third party.
 
 ## 2. V1 scope and state
 
-### Proposed and approved only after owner confirmation
+### Approved architecture
 
 - Local-first pnpm/Turborepo application
 - Next.js App Router, strict TypeScript, Tailwind CSS, shadcn/ui, Zod
@@ -373,18 +374,15 @@ No paid model, public post, deployment, or real-account browser test runs withou
 an explicit guarded flag and current user authorization. Local tests are not
 production proof.
 
-## 15. Architecture decisions and open questions
+## 15. Architecture decisions and owner approval
 
-Proposed decisions are recorded in `docs/architecture/decisions/`:
+Approved decisions are recorded in `docs/architecture/decisions/`:
 
 - local-first web + runner boundary
 - human approval at the point of public posting
 - provider-capability registry and local-only secret storage
 
-Owner decisions required before implementation:
-
-1. Approve or revise this architecture.
-2. Approve `Intellisync-Solutions/open-social-agent` as the repository identity.
-3. Approve Apache-2.0 or select another OSI-approved license.
-4. Confirm that V1's one-operator self-hosted boundary and approval-at-post-time
-   behavior satisfy the first release.
+The approval is recorded in
+`docs/history/0002-architecture-approval.md`. Future changes to the local-runner,
+secret-storage, provider, publication-approval, tenancy, or deployment boundaries
+require an architecture revision and owner review.

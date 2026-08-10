@@ -1,6 +1,6 @@
 # ADR 0002: Require approval at the point of public posting
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-08-10
 
 ## Context

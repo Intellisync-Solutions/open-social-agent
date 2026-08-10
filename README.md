@@ -7,7 +7,7 @@ and pause for approval immediately before posting.
 
 ## Current status
 
-**Architecture draft — implementation has not started.**
+**Architecture v0.1 approved — implementation is underway.**
 
 Read:
 
@@ -37,13 +37,12 @@ the user's control of the public action.
 - Playwright with isolated app-owned browser profiles
 - pnpm and Turborepo
 
-## Open-source status
+## License
 
-The recommended license is Apache-2.0, pending owner approval. Until a license
-is committed, the public draft is source-visible but not yet licensed for reuse.
+Licensed under Apache-2.0. See [`LICENSE`](LICENSE).
 
 ## Contributing
 
-Architecture discussion is welcome after the public repository exists. Product
-code should not be submitted until architecture version 0.1 is approved. See
+Architecture and implementation contributions are welcome. Start from
+[`AGENTS.md`](AGENTS.md), preserve the approval and publication gates, and see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
