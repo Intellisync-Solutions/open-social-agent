@@ -1,0 +1,49 @@
+# Open Social Agent
+
+Open Social Agent is a proposed open-source, local-first social media workflow
+application. It will research within user-approved boundaries, compose in a
+saved voice, prepare an exact destination in a user-selected isolated browser,
+and pause for approval immediately before posting.
+
+## Current status
+
+**Architecture draft — implementation has not started.**
+
+Read:
+
+- [`BUILD_INIT.md`](BUILD_INIT.md) for the proposed product architecture
+- [`docs/product/v1-scope.md`](docs/product/v1-scope.md) for V1 acceptance
+- [`SECURITY.md`](SECURITY.md) for safety and secret boundaries
+- [`docs/architecture/README.md`](docs/architecture/README.md) for current truth
+
+## V1 in one sentence
+
+Configure provider + browser + destination + research + voice + budget +
+schedule, receive an evidence-backed draft, approve the exact post, and retain a
+complete editable history and verified publication receipt.
+
+## Why approval remains human
+
+Social posts represent a person or organization publicly. Current OpenAI
+computer-use guidance says sending or posting on a user's behalf should be
+confirmed at action time. The schedule prepares the work; it does not remove
+the user's control of the public action.
+
+## Proposed stack
+
+- Next.js App Router, strict TypeScript, Tailwind CSS, shadcn/ui, Zod
+- Convex Auth and Convex durable data/scheduling
+- OpenAI Responses API web search and computer use
+- Playwright with isolated app-owned browser profiles
+- pnpm and Turborepo
+
+## Open-source status
+
+The recommended license is Apache-2.0, pending owner approval. Until a license
+is committed, the public draft is source-visible but not yet licensed for reuse.
+
+## Contributing
+
+Architecture discussion is welcome after the public repository exists. Product
+code should not be submitted until architecture version 0.1 is approved. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
