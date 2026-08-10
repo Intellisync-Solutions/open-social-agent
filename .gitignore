@@ -10,6 +10,8 @@ playwright-report/
 test-results/
 .data/
 *.log
+*.tsbuildinfo
 .DS_Store
 browser-profiles/
 secrets/
+.pnpm-store/

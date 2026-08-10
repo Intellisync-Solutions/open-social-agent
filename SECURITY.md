@@ -1,7 +1,7 @@
 # Security Policy
 
-Status: draft for architecture version 0.1. It does not claim an implemented or
-verified security posture.
+Status: approved policy for architecture version 0.1. Individual controls remain
+unverified until their implementation slice records deterministic evidence.
 
 ## Protected assets
 
