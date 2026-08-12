@@ -74,10 +74,15 @@ would send, post, submit, or represent the user to a third party.
 - Loopback-only local runner with one-use pairing and bounded sessions
 - OS-keyring provider secret storage with authenticated-encryption fallback
 - Allowlisted browser detection and truthful read-only provider auth probe
+- Auth-scoped automation profile and schedule persistence with archive/restore
+  and exact-confirmation purge rules
+- Timezone-aware recurrence, idempotent run creation, immutable configuration
+  snapshots, and a deterministic zero-post harness plan
 
-Schedules, harness execution, history CRUD, approval, computer use, and
-publication receipts remain planned. Provider generation/tool capabilities
-remain unverified until a guarded test run.
+Automatic cron activation, provider generation, research evidence, output and
+history CRUD, approval, computer use, and publication receipts remain planned.
+Provider generation/tool capabilities remain unverified until a guarded test
+run.
 
 ### Deferred
 
