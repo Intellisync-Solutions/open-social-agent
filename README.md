@@ -40,10 +40,13 @@ the user's control of the public action.
 - installed-browser detection without profile access
 - non-generative provider authentication probe, guarded and verified against
   OpenAI without making a generation request
+- auth-scoped automation profile and schedule persistence
+- DST-aware recurrence, idempotent immutable run snapshots, and a zero-post
+  harness planner
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Provider generation, schedules, history, harness execution, and posting remain
-incomplete.
+Provider generation, automatic cron activation, research/output history,
+approval, browser execution, and posting remain incomplete.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
 implemented/planned boundary.
 

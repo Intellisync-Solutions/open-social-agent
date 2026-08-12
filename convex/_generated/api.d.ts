@@ -9,8 +9,11 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as automationProfiles from "../automationProfiles.js";
 import type * as http from "../http.js";
 import type * as onboarding from "../onboarding.js";
+import type * as schedules from "../schedules.js";
+import type * as validators from "../validators.js";
 
 import type {
   ApiFromModules,
@@ -20,8 +23,11 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  automationProfiles: typeof automationProfiles;
   http: typeof http;
   onboarding: typeof onboarding;
+  schedules: typeof schedules;
+  validators: typeof validators;
 }>;
 
 /**

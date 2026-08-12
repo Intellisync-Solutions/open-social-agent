@@ -9,9 +9,9 @@ Next.js shell, shared onboarding contracts, auth-scoped resumable persistence,
 and a loopback-only local secret and provider-authentication boundary.
 
 `BUILD_INIT.md` has `architecture_status: approved` and
-`implementation_status: partial`. Future contributors must not describe harness
-execution, scheduling, isolated browser execution, history, approval, or receipt
-layers as shipped.
+`implementation_status: partial`. Future contributors must not describe
+provider-backed harness execution, automatic scheduling, isolated browser
+execution, history, approval, or receipt layers as shipped.
 
 ## Implemented seams
 
@@ -23,6 +23,12 @@ layers as shipped.
   non-generative provider authentication probe
 - `packages/secrets`: OS keyring plus explicit AES-256-GCM fallback
 - `packages/browser`: allowlisted installed-browser detection
+- `packages/scheduling`: validated daily, weekly, and five-field cron
+  recurrence with IANA timezone and DST-aware next occurrences
+- `packages/harness`: versioned run-state transitions and a zero-post budget/tool
+  plan with no external writes
+- `convex`: auth-scoped automation profile/schedule CRUD, idempotent manual and
+  bounded internal due-run creation, and immutable configuration snapshots
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -33,10 +39,11 @@ but no provider secret field or transport.
 - `apps/web`: settings, CRUD, run/approval/history UI beyond onboarding
 - `apps/runner`: local due-run claimant and computer-use execution
 - `packages/contracts`: versioned cross-boundary schemas
-- `packages/harness`: policy, context, evidence, model, evaluation, approval
+- `packages/harness`: research, provider composition, evidence, evaluation,
+  approval, and receipts beyond the zero-post planner
 - `packages/browser`: installed-browser detection and isolated execution
 - `packages/providers`: OpenAI and Responses-compatible adapters
-- `packages/scheduling`: recurrence and idempotent due-run calculation
+- `packages/scheduling`: missed-run policy beyond implemented recurrence
 - `packages/ui`: accessible shared interface components
 - `convex`: authenticated durable data, scheduling, runs, receipts, audit
 
@@ -59,7 +66,8 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is durable model/content/research policies, schedules, immutable
-configuration snapshots, and the governed harness. The provider authentication
-probe is implemented; paid generation capabilities remain unverified until a
-guarded harness test.
+The next slice is runner claiming plus bounded research, structured provider
+composition, output persistence, evaluation, and history CRUD. Automatic cron
+activation remains disabled until that end-to-end run path exists. Paid
+generation capabilities remain unverified until an explicitly guarded harness
+test.
