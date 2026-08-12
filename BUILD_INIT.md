@@ -86,10 +86,13 @@ would send, post, submit, or represent the user to a third party.
 - Bounded OpenAI computer-call iteration with ordered action batches, fresh
   screenshots, blocked safety confirmations, and a controlled isolated-browser
   proof using a synthetic provider client
+- Revocable runner registrations with hashed device credentials, authenticated
+  HTTP claim/receipt bridge, atomic leased execution claims, and an independently
+  gated local processing endpoint
 
 Automatic cron activation, provider-backed web research, OpenAI computer-tool
-live-provider verification, runner approval claiming, and real-account
-publication verification remain planned. OpenAI structured composition is
+live-provider verification, runner polling, and real-account publication
+verification remain planned. OpenAI structured composition is
 verified for Luna with search disabled; the computer loop is deterministic and
 locally dry-run only.
 

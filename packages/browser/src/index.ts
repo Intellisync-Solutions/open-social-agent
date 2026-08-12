@@ -102,6 +102,7 @@ export type ComputerExecutionPolicy = {
 export type ApprovedComputerEnvironment = {
   execute(actions: BrowserAction[]): Promise<void>;
   screenshot(): Promise<{ imageDataUrl: string; currentUrl: string }>;
+  renderedText(): Promise<string>;
 };
 
 export function isolatedProfilePath(
@@ -302,6 +303,8 @@ export async function withApprovedComputerEnvironment<T>(
           currentUrl: page.url(),
         };
       },
+      renderedText: async () =>
+        (await page.locator("body").innerText()).slice(0, 20_000),
     });
   } finally {
     await context.close();

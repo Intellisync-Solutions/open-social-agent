@@ -110,5 +110,26 @@ Expected evidence includes `directDetail: true`, `isolatedProfile: true`,
 `pending_safety_checks` value blocks before execution and is never automatically
 acknowledged.
 
+## Runner device and consequential processing
+
+An authenticated operator provisions a runner registration through Convex. The
+one-time raw token must be sent immediately to the paired loopback runner's
+`POST /v1/runner-device` settings route; Convex retains only its SHA-256 digest.
+The runner stores the token in the same local secret boundary as provider keys.
+Revoking the durable registration invalidates subsequent claims.
+
+Approved-run processing remains independently disabled at startup. A maintainer
+may opt in only after a runner device, OpenAI key, isolated browser login, and
+exact current approval are all present:
+
+```bash
+OSA_ENABLE_COMPUTER=1 pnpm start:runner
+```
+
+The paired UI must then make an explicit `POST /v1/process-approved` request
+with an idempotency ID and browser kind. This endpoint processes at most one
+claim; it is not a polling loop, cron activation, or permission to post to an
+unspecified account.
+
 Do not put provider keys in environment examples, command history, logs, issue
 reports, screenshots, or Convex.

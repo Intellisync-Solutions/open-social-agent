@@ -23,6 +23,7 @@ const config: RunnerConfig = {
   dataDirectory: "/tmp/open-social-agent-test",
   forceEncryptedStore: false,
   generationEnabled: false,
+  computerEnabled: false,
 };
 
 const openApps: Array<ReturnType<typeof buildRunner>["app"]> = [];
@@ -266,6 +267,151 @@ describe("local runner security boundary", () => {
     });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ error: { code: "GENERATION_DISABLED" } });
+  });
+
+  it("stores a runner device token locally without returning it", async () => {
+    const secretStore = new MemorySecretStore();
+    const { app } = buildRunner({ config, secretStore, pairingCode: "123456" });
+    openApps.push(app);
+    const pair = await app.inject({
+      method: "POST",
+      url: "/v1/pair",
+      headers: { origin: config.webOrigin, "x-osa-request": "settings" },
+      payload: { code: "123456" },
+    });
+    const token = "a".repeat(43);
+    const runnerId = "runner_device_identifier_01";
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/runner-device",
+      headers: {
+        origin: config.webOrigin,
+        "x-osa-request": "settings",
+        cookie: pair.headers["set-cookie"] as string,
+      },
+      payload: {
+        runnerId,
+        token,
+        siteUrl: "https://example.convex.site",
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.body).not.toContain(token);
+    expect(secretStore.values).toMatchObject(
+      new Map([
+        ["runner:device:token", token],
+        ["runner:device:id", runnerId],
+        ["runner:device:site", "https://example.convex.site"],
+      ]),
+    );
+  });
+
+  it("keeps consequential processing disabled by default", async () => {
+    const secretStore = new MemorySecretStore();
+    const { app } = buildRunner({ config, secretStore, pairingCode: "123456" });
+    openApps.push(app);
+    const pair = await app.inject({
+      method: "POST",
+      url: "/v1/pair",
+      headers: { origin: config.webOrigin, "x-osa-request": "settings" },
+      payload: { code: "123456" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/process-approved",
+      headers: {
+        origin: config.webOrigin,
+        "x-osa-request": "execution",
+        cookie: pair.headers["set-cookie"] as string,
+      },
+      payload: {
+        requestId: "execution-request-0001",
+        browserKind: "brave",
+      },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: { code: "COMPUTER_DISABLED" },
+    });
+  });
+
+  it("records a bounded failure after an approved claim cannot execute", async () => {
+    const secretStore = new MemorySecretStore();
+    secretStore.values.set("provider:openai:default", "synthetic-openai-key-for-runner-test");
+    secretStore.values.set("runner:device:id", "runner_device_identifier_01");
+    secretStore.values.set("runner:device:token", "a".repeat(43));
+    secretStore.values.set("runner:device:site", "https://example.convex.site");
+    const receipts: unknown[] = [];
+    const claim = {
+      userId: "user_identifier_0001",
+      registrationId: "registration_1",
+      runId: "run_1",
+      approvalId: "approval_1",
+      outputId: "output_1",
+      revision: 1,
+      body: "Approved body.",
+      bodyHash: "b".repeat(64),
+      destinationUrl: "https://social.example/feed/acme",
+      approvalExpiresAt: 90_000,
+      leaseExpiresAt: 90_000,
+      executionRequestId: "execution-request-0001",
+      modelId: "gpt-5.6",
+    };
+    const { app } = buildRunner({
+      config: { ...config, computerEnabled: true },
+      secretStore,
+      pairingCode: "123456",
+      now: () => 1_000,
+      claimApprovedRun: async () => claim,
+      submitPublicationReceipt: async ({ receipt }) => {
+        receipts.push(receipt);
+        return { receiptId: "receipt_1" };
+      },
+      detectInstalledBrowsers: async () => [{
+        kind: "brave",
+        label: "Brave Browser",
+        executablePath: "/synthetic/brave",
+      }],
+      withApprovedComputerEnvironment: async (_options, task) => await task({
+        execute: async () => undefined,
+        screenshot: async () => ({
+          imageDataUrl: "data:image/png;base64,AA==",
+          currentUrl: claim.destinationUrl,
+        }),
+        renderedText: async () => "",
+      }),
+      processComputerLoop: async () => {
+        throw new Error("synthetic provider failure");
+      },
+    });
+    openApps.push(app);
+    const pair = await app.inject({
+      method: "POST",
+      url: "/v1/pair",
+      headers: { origin: config.webOrigin, "x-osa-request": "settings" },
+      payload: { code: "123456" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/process-approved",
+      headers: {
+        origin: config.webOrigin,
+        "x-osa-request": "execution",
+        cookie: pair.headers["set-cookie"] as string,
+      },
+      payload: { requestId: claim.executionRequestId, browserKind: "brave" },
+    });
+    expect(response.statusCode).toBe(502);
+    expect(receipts).toEqual([
+      expect.objectContaining({
+        state: "failed",
+        errorCode: "RUNNER_EXECUTION_FAILED",
+        actualModel: "unavailable",
+        totalTokens: 0,
+        turns: 0,
+        actionsExecuted: 0,
+      }),
+    ]);
   });
 });
 

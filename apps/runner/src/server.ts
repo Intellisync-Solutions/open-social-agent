@@ -1,19 +1,31 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import { detectInstalledBrowsers } from "@open-social-agent/browser";
+import {
+  detectInstalledBrowsers,
+  directVerificationState,
+  isolatedProfilePath,
+  withApprovedComputerEnvironment,
+} from "@open-social-agent/browser";
 import {
   ProviderCapabilityProbeSchema,
   ProviderExecutionResultSchema,
   RunnerPairRequestSchema,
   RunnerProviderKindSchema,
   RunnerComposeInputSchema,
+  RunnerDeviceRegistrationSchema,
+  RunnerProcessRequestSchema,
   RunnerSecretInputSchema,
   type RunnerProviderKind,
+  type RunnerClaimResponse,
 } from "@open-social-agent/contracts";
 import type { SecretStore } from "@open-social-agent/secrets";
 import { validateCompositionInput } from "@open-social-agent/harness";
-import { createOpenAIProvider, type ProviderAdapter } from "@open-social-agent/providers";
+import {
+  createOpenAIProvider,
+  runOpenAIComputerLoop,
+  type ProviderAdapter,
+} from "@open-social-agent/providers";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import {
   createHash,
@@ -27,6 +39,7 @@ import {
   runProviderProbe,
   validateProviderBaseUrl,
 } from "./provider-probe";
+import { claimApprovedRun, submitPublicationReceipt } from "./convex-bridge";
 
 const sessionCookie = "osa_runner_session";
 const sessionDurationMs = 8 * 60 * 60 * 1000;
@@ -39,6 +52,11 @@ export function buildRunner(options: {
   now?: () => number;
   providerProbe?: typeof runProviderProbe;
   providerAdapter?: ProviderAdapter;
+  processComputerLoop?: typeof runOpenAIComputerLoop;
+  claimApprovedRun?: typeof claimApprovedRun;
+  submitPublicationReceipt?: typeof submitPublicationReceipt;
+  detectInstalledBrowsers?: typeof detectInstalledBrowsers;
+  withApprovedComputerEnvironment?: typeof withApprovedComputerEnvironment;
 }) {
   const app = Fastify({
     bodyLimit: 131_072,
@@ -48,6 +66,11 @@ export function buildRunner(options: {
   const now = options.now ?? Date.now;
   const providerProbe = options.providerProbe ?? runProviderProbe;
   const providerAdapter = options.providerAdapter ?? createOpenAIProvider();
+  const processComputerLoop = options.processComputerLoop ?? runOpenAIComputerLoop;
+  const claimRun = options.claimApprovedRun ?? claimApprovedRun;
+  const submitReceipt = options.submitPublicationReceipt ?? submitPublicationReceipt;
+  const detectBrowsers = options.detectInstalledBrowsers ?? detectInstalledBrowsers;
+  const withComputerEnvironment = options.withApprovedComputerEnvironment ?? withApprovedComputerEnvironment;
   const pairingCode =
     options.pairingCode ?? String(randomInt(100_000, 1_000_000));
   const pairingDigest = digest(pairingCode);
@@ -76,7 +99,9 @@ export function buildRunner(options: {
     }
     if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
       const expectedPurpose =
-        request.url === "/v1/compose" ? "execution" : "settings";
+        request.url === "/v1/compose" || request.url === "/v1/process-approved"
+          ? "execution"
+          : "settings";
       if (request.headers["x-osa-request"] !== expectedPurpose) {
         return reply
           .code(403)
@@ -120,6 +145,204 @@ export function buildRunner(options: {
         maxAge: Math.floor(sessionDurationMs / 1000),
       });
       return { status: "paired", expiresAt: now() + sessionDurationMs };
+    },
+  );
+
+  app.post(
+    "/v1/runner-device",
+    {
+      config: { rateLimit: { max: 5, timeWindow: 60_000 } },
+      preHandler: authorize,
+    },
+    async (request, reply) => {
+      const parsed = RunnerDeviceRegistrationSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send(errorEnvelope(request.id, "RUNNER_DEVICE_INVALID"));
+      }
+      let siteUrl: string;
+      try {
+        const url = new URL(parsed.data.siteUrl);
+        if (url.protocol !== "https:" || url.username || url.password) {
+          throw new Error("invalid");
+        }
+        siteUrl = url.origin;
+      } catch {
+        return reply
+          .code(400)
+          .send(errorEnvelope(request.id, "CONVEX_SITE_URL_INVALID"));
+      }
+      await options.secretStore.set("runner:device:token", parsed.data.token);
+      await options.secretStore.set("runner:device:id", parsed.data.runnerId);
+      await options.secretStore.set("runner:device:site", siteUrl);
+      return reply.code(201).send({
+        status: "registered",
+        runnerId: parsed.data.runnerId,
+        tokenStored: true,
+      });
+    },
+  );
+
+  app.post(
+    "/v1/process-approved",
+    {
+      config: { rateLimit: { max: 1, timeWindow: 60_000 } },
+      preHandler: authorize,
+    },
+    async (request, reply) => {
+      if (!options.config.computerEnabled) {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "COMPUTER_DISABLED"));
+      }
+      const parsed = RunnerProcessRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send(errorEnvelope(request.id, "PROCESS_REQUEST_INVALID"));
+      }
+      const [runnerId, token, siteUrl, apiKey] = await Promise.all([
+        options.secretStore.get("runner:device:id"),
+        options.secretStore.get("runner:device:token"),
+        options.secretStore.get("runner:device:site"),
+        options.secretStore.get(secretRef("openai")),
+      ]);
+      if (!runnerId || !token || !siteUrl) {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "RUNNER_DEVICE_MISSING"));
+      }
+      if (!apiKey) {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "PROVIDER_SECRET_MISSING"));
+      }
+      const browser = (await detectBrowsers()).find(
+        (candidate) => candidate.kind === parsed.data.browserKind,
+      );
+      if (!browser) {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "BROWSER_NOT_AVAILABLE"));
+      }
+      let activeClaim: RunnerClaimResponse | null = null;
+      let receiptAttempted = false;
+      try {
+        activeClaim = await claimRun({
+          siteUrl,
+          runnerId,
+          token,
+          requestId: parsed.data.requestId,
+        });
+        const claim = activeClaim;
+        if (!claim) return reply.code(204).send();
+        if (claim.approvalExpiresAt <= now() || claim.leaseExpiresAt <= now()) {
+          throw new Error("APPROVAL_EXPIRED");
+        }
+        const profilePath = isolatedProfilePath(
+          options.config.dataDirectory,
+          claim.userId,
+          parsed.data.browserKind,
+        );
+        const execution = await withComputerEnvironment(
+          {
+            executablePath: browser.executablePath,
+            profilePath,
+            destinationUrl: claim.destinationUrl,
+            approvedBody: claim.body,
+          },
+          async (environment) => {
+            const result = await processComputerLoop({
+              apiKey,
+              model: claim.modelId,
+              destinationUrl: claim.destinationUrl,
+              approvedBody: claim.body,
+              environment,
+            });
+            return { result, renderedBody: await environment.renderedText() };
+          },
+        );
+        const result = execution.result;
+        const verification =
+          result.state === "completed"
+            ? directVerificationState({
+                currentUrl: result.finalUrl,
+                destinationUrl: claim.destinationUrl,
+                renderedBody: execution.renderedBody,
+                approvedBody: claim.body,
+              })
+            : "blocked";
+        const directUrl = verification === "live" ? result.finalUrl : null;
+        const state =
+          result.state === "completed" ? verification : "blocked";
+        receiptAttempted = true;
+        await submitReceipt({
+          siteUrl,
+          token,
+          receipt: {
+            runnerId,
+            runId: claim.runId,
+            approvalId: claim.approvalId,
+            executionRequestId: claim.executionRequestId,
+            state,
+            destinationUrl: claim.destinationUrl,
+            bodyHash: claim.bodyHash,
+            directUrl,
+            errorCode: result.state === "blocked" ? result.errorCode : null,
+            requestedModel: result.requestedModel,
+            actualModel: result.actualModel,
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            totalTokens: result.usage.totalTokens,
+            turns: result.turns,
+            actionsExecuted: result.actionsExecuted,
+          },
+        });
+        return {
+          state,
+          runId: claim.runId,
+          directUrl,
+          actionsExecuted: result.actionsExecuted,
+          turns: result.turns,
+        };
+      } catch {
+        if (
+          activeClaim &&
+          !receiptAttempted &&
+          activeClaim.leaseExpiresAt > now()
+        ) {
+          try {
+            await submitReceipt({
+              siteUrl,
+              token,
+              receipt: {
+                runnerId,
+                runId: activeClaim.runId,
+                approvalId: activeClaim.approvalId,
+                executionRequestId: activeClaim.executionRequestId,
+                state: "failed",
+                destinationUrl: activeClaim.destinationUrl,
+                bodyHash: activeClaim.bodyHash,
+                directUrl: null,
+                errorCode: "RUNNER_EXECUTION_FAILED",
+                requestedModel: activeClaim.modelId,
+                actualModel: "unavailable",
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+                turns: 0,
+                actionsExecuted: 0,
+              },
+            });
+          } catch {
+            // The claim lease remains the recoverable evidence when the receipt bridge is unavailable.
+          }
+        }
+        return reply
+          .code(502)
+          .send(errorEnvelope(request.id, "RUNNER_EXECUTION_FAILED"));
+      }
     },
   );
 
@@ -189,7 +412,7 @@ export function buildRunner(options: {
 
   app.get("/v1/session", { preHandler: authorize }, async () => ({
     status: "paired",
-    browsers: (await detectInstalledBrowsers()).map(({ kind, label }) => ({
+    browsers: (await detectBrowsers()).map(({ kind, label }) => ({
       kind,
       label,
     })),

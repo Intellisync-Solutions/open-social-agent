@@ -132,5 +132,38 @@ export default defineSchema({
     attemptedAt: v.number(),
     verifiedAt: v.optional(v.number()),
     errorCode: v.optional(v.string()),
+    requestedModel: v.string(),
+    actualModel: v.string(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    totalTokens: v.number(),
+    turns: v.number(),
+    actionsExecuted: v.number(),
   }).index("by_runId", ["runId"]),
+  runnerRegistrations: defineTable({
+    userId: v.id("users"),
+    runnerId: v.string(),
+    tokenHash: v.string(),
+    label: v.string(),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    lastSeenAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_runnerId", ["runnerId"]),
+  executionClaims: defineTable({
+    userId: v.id("users"),
+    runnerRegistrationId: v.id("runnerRegistrations"),
+    runnerId: v.string(),
+    runId: v.id("runs"),
+    approvalId: v.id("approvals"),
+    requestId: v.string(),
+    leaseExpiresAt: v.number(),
+    status: v.union(v.literal("claimed"), v.literal("completed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_runnerId_and_requestId", ["runnerId", "requestId"]),
 });

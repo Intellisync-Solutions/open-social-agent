@@ -13,6 +13,7 @@ const runnerConfigSchema = z.object({
   forceEncryptedStore: z.boolean(),
   fallbackEncryptionKey: z.string().optional(),
   generationEnabled: z.boolean(),
+  computerEnabled: z.boolean(),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
@@ -29,5 +30,6 @@ export function loadRunnerConfig(
     forceEncryptedStore: environment.OSA_SECRET_STORE === "encrypted-file",
     fallbackEncryptionKey: environment.LOCAL_SECRET_ENCRYPTION_KEY,
     generationEnabled: environment.OSA_ENABLE_GENERATION === "1",
+    computerEnabled: environment.OSA_ENABLE_COMPUTER === "1",
   });
 }

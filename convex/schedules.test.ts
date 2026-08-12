@@ -67,6 +67,11 @@ const decideApproval = makeFunctionReference<"mutation">("approvals:decideMine")
 const recordReceipt = makeFunctionReference<"mutation">(
   "receipts:recordVerified",
 );
+const provisionRunner = makeFunctionReference<"mutation">("runners:provisionMine");
+const listRunners = makeFunctionReference<"query">("runners:listMine");
+const claimApproved = makeFunctionReference<"mutation">(
+  "runners:claimApprovedInternal",
+);
 
 async function authenticatedTest() {
   const t = convexTest(schema, modules);
@@ -290,25 +295,64 @@ describe("auth-scoped automation persistence", () => {
     });
     const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!
       .userId;
+    const provisioned = await alice.mutation(provisionRunner, { label: "Test runner" });
+    const { runnerId, registrationId } = provisioned;
+    expect(await alice.query(listRunners, {})).toEqual([
+      expect.not.objectContaining({ tokenHash: expect.anything() }),
+    ]);
+    const executionRequestId = "execution-request-0001";
+    const claim = await t.mutation(claimApproved, {
+      registrationId,
+      userId,
+      runnerId,
+      requestId: executionRequestId,
+      now: Date.now(),
+    });
+    expect(claim).toMatchObject({ runId, approvalId });
+    expect(await t.mutation(claimApproved, {
+      registrationId,
+      userId,
+      runnerId,
+      requestId: executionRequestId,
+      now: Date.now(),
+    })).toEqual(claim);
     await expect(
       t.mutation(recordReceipt, {
         userId,
         runId,
         approvalId,
+        runnerRegistrationId: registrationId,
+        executionRequestId,
         state: "live",
         destinationUrl: profileInput.destination.feedUrl,
         bodyHash: revision!.bodyHash,
         directUrl: "https://attacker.example/post/receipt-1",
+        requestedModel: "gpt-5.6",
+        actualModel: "gpt-5.6-2026-08-01",
+        inputTokens: 20,
+        outputTokens: 5,
+        totalTokens: 25,
+        turns: 2,
+        actionsExecuted: 3,
       }),
     ).rejects.toThrow("DIRECT_VERIFICATION_REQUIRED");
     await t.mutation(recordReceipt, {
       userId,
       runId,
       approvalId,
+      runnerRegistrationId: registrationId,
+      executionRequestId,
       state: "live",
       destinationUrl: profileInput.destination.feedUrl,
       bodyHash: revision!.bodyHash,
       directUrl: "https://social.example/feed/acme/post/receipt-1",
+      requestedModel: "gpt-5.6",
+      actualModel: "gpt-5.6-2026-08-01",
+      inputTokens: 20,
+      outputTokens: 5,
+      totalTokens: 25,
+      turns: 2,
+      actionsExecuted: 3,
     });
     const state = await t.run(async (ctx) => ({
       run: await ctx.db.get("runs", runId),
@@ -320,6 +364,20 @@ describe("auth-scoped automation persistence", () => {
     expect(state.run?.state).toBe("live");
     expect(state.receipt?.verifiedAt).toBeTypeOf("number");
     expect(state.receipt?.directUrl).toContain("/post/receipt-1");
+    expect(state.receipt).toMatchObject({
+      requestedModel: "gpt-5.6",
+      actualModel: "gpt-5.6-2026-08-01",
+      totalTokens: 25,
+      turns: 2,
+      actionsExecuted: 3,
+    });
+    expect(await t.mutation(claimApproved, {
+      registrationId,
+      userId,
+      runnerId,
+      requestId: executionRequestId,
+      now: Date.now(),
+    })).toBeNull();
     await alice.mutation(setOutputArchived, { outputId, archived: true });
     const output = await t.run(async (ctx) => await ctx.db.get("outputs", outputId));
     await expect(

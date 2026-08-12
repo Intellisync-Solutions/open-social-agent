@@ -49,9 +49,11 @@ the user's control of the public action.
   receipt guards verified on a controlled local browser fixture
 - bounded OpenAI computer-call iteration with ordered actions, fresh screenshots,
   blocked safety confirmations, and a synthetic-provider isolated-browser proof
+- revocable hashed-token runner registration plus atomic approval claim and
+  claim-bound receipt transport, with local computer processing disabled by default
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Provider-backed research, automatic cron activation, runner approval claiming,
+Provider-backed research, automatic cron activation, runner polling,
 live-provider computer use, real-account browser authorization, and posting
 remain incomplete. Luna structured composition has a guarded local verification;
 Terra, Sol, search, live computer use, and real social publication remain
