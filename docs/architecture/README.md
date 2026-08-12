@@ -46,6 +46,10 @@ execution, history, approval, or receipt layers as shipped.
   aggregation, and fail-closed safety checks
 - `packages/browser`: normalized computer actions executed in an isolated,
   environment-cleared browser with viewport, destination, and content guards
+- `convex`: revocable runner registrations containing only token hashes, atomic
+  idempotent approval claims, bounded leases, and claim-bound terminal receipts
+- `apps/runner`: HTTPS-only Convex bridge, local-only raw device token storage,
+  and explicitly gated one-run processing with direct-body verification
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -83,9 +87,9 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is a trusted runner claim/approval bridge plus bounded
-provider-backed research and evaluation. Automatic cron remains disabled until
-that end-to-end path exists. Luna structured output and the synthetic-provider
+The next slice is bounded provider-backed research and evaluation, followed by
+runner polling. Automatic cron remains disabled until that end-to-end path
+exists. Luna structured output and the synthetic-provider
 computer loop over a controlled browser are locally verified; Terra, Sol,
 search, alternate providers, live-provider computer use, and real social
 accounts remain unverified.

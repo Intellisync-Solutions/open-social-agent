@@ -16,6 +16,9 @@ executes model and browser work; the web app and model cannot expand its scope.
 - Computer calls are bounded, ordered, and revalidated against the exact
   destination, viewport, and approved body. Never auto-acknowledge provider
   safety checks or inherit host environment variables into the browser.
+- Raw runner device tokens stay in the local secret store. Convex stores only a
+  digest. Claims require the exact active registration, user, approval, revision,
+  destination, lease, and idempotency request; receipts require that same claim.
 - Every externally visible action remains out of scope until an exact current
   approval is validated by the publication corridor.
 

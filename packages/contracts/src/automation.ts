@@ -13,6 +13,8 @@ export const modelPresetPolicies = {
   quality: { modelId: "gpt-5.6-sol", reasoningEffort: "high" },
 } as const;
 
+export const openAIComputerModel = "gpt-5.6" as const;
+
 export const DestinationPolicySchema = z.object({
   feedUrl: z.string().url(),
   allowedOrigin: z.string().url(),
