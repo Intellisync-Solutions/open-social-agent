@@ -2,8 +2,8 @@
 
 Date: 2026-08-12
 
-State: local implementation and validation complete; commit, push, and pull
-request evidence pending
+State: implemented, validated, and published on `codex/v1-acceptance-closure`
+through pull request #11
 
 ## Outcome
 
@@ -21,6 +21,9 @@ self-hosted one-operator architecture.
 - unapproved output purge removes dependent revisions, research, evidence, and
   evaluation atomically while retaining a cancelled run envelope; approved
   output and receipt history remains non-purgeable;
+- an approved revision is server-locked against editing or archival while it
+  awaits execution, and every execution claim or replay requires the output to
+  remain active;
 - a paired runner can open a detected browser in the same app-owned user scope
   used by publication, constrained to the exact HTTPS origin for manual login;
   the app records only that the profile was opened and never claims login proof.

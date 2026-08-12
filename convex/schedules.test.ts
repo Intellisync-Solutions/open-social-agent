@@ -803,6 +803,15 @@ describe("auth-scoped automation persistence", () => {
       expiresAt: Date.now() + 60_000,
       decision: "approved",
     });
+    await expect(
+      alice.mutation(reviseOutput, {
+        outputId,
+        body: "Editing after approval must fail closed.",
+      }),
+    ).rejects.toThrow("OUTPUT_REVISION_LOCKED");
+    await expect(
+      alice.mutation(setOutputArchived, { outputId, archived: true }),
+    ).rejects.toThrow("OUTPUT_EXECUTION_PENDING");
     const userId = (await t.run(
       async (ctx) => await ctx.db.get("runs", runId),
     ))!.userId;

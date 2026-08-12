@@ -41,9 +41,7 @@ export default function DraftsPage() {
     try {
       await revise({ outputId, body });
       setEditing(null);
-      setMessage(
-        "Revision saved. Any prior approval would be stale and cannot execute.",
-      );
+      setMessage("Immutable revision saved for review.");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "REVISION_SAVE_FAILED",
@@ -127,7 +125,8 @@ export default function DraftsPage() {
                           Cancel
                         </Button>
                       </>
-                    ) : status === "active" ? (
+                    ) : status === "active" &&
+                      draft.runState === "awaiting_approval" ? (
                       <Button
                         variant="outline"
                         onClick={() => {

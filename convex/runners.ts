@@ -186,7 +186,7 @@ export const claimApprovedInternal = internalMutation({
           q.eq("outputId", approval.outputId).eq("revision", approval.revision),
         )
         .unique();
-      if (!output || !revision || output.userId !== args.userId || output.currentRevision !== approval.revision || revision.bodyHash !== approval.bodyHash) {
+      if (!output || !revision || output.userId !== args.userId || output.status !== "active" || output.currentRevision !== approval.revision || revision.bodyHash !== approval.bodyHash) {
         await ctx.db.patch(run._id, { state: "blocked", updatedAt: args.now });
         continue;
       }
@@ -396,7 +396,7 @@ async function claimPayload(
       q.eq("outputId", approval.outputId).eq("revision", approval.revision),
     )
     .unique();
-  if (!output || !revision || output.userId !== claim.userId || output.currentRevision !== approval.revision || revision.bodyHash !== approval.bodyHash) {
+  if (!output || !revision || output.userId !== claim.userId || output.status !== "active" || output.currentRevision !== approval.revision || revision.bodyHash !== approval.bodyHash) {
     await closeStaleClaim(ctx, claim, run, now);
     return null;
   }
