@@ -270,10 +270,31 @@ export const purgeMine = mutation({
     if (revisions.length >= 100) {
       throw new ConvexError("OUTPUT_REVISION_LIMIT_EXCEEDED");
     }
+    const [evaluation, toolExecution, evidence] = await Promise.all([
+      ctx.db
+        .query("evaluations")
+        .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+        .unique(),
+      ctx.db
+        .query("toolExecutions")
+        .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+        .unique(),
+      ctx.db
+        .query("evidenceItems")
+        .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+        .take(101),
+    ]);
+    if (evidence.length > 100) {
+      throw new ConvexError("OUTPUT_EVIDENCE_LIMIT_EXCEEDED");
+    }
     for (const revision of revisions) await ctx.db.delete(revision._id);
+    if (evaluation) await ctx.db.delete(evaluation._id);
+    if (toolExecution) await ctx.db.delete(toolExecution._id);
+    for (const item of evidence) await ctx.db.delete(item._id);
     await ctx.db.delete(output._id);
     await ctx.db.patch(output.runId, {
       state: "cancelled",
+      blockedCode: "OUTPUT_PURGED_BY_USER",
       updatedAt: Date.now(),
     });
     return null;

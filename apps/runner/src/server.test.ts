@@ -431,6 +431,7 @@ describe("local runner security boundary", () => {
         runnerId,
         token,
         siteUrl: "https://example.convex.site",
+        profileScope: "user_identifier_0001",
       },
     });
     expect(response.statusCode).toBe(201);
@@ -440,8 +441,75 @@ describe("local runner security boundary", () => {
         ["runner:device:token", token],
         ["runner:device:id", runnerId],
         ["runner:device:site", "https://example.convex.site"],
+        ["runner:device:profile-scope", "user_identifier_0001"],
       ]),
     );
+  });
+
+  it("opens only a paired app-owned browser profile and does not claim login proof", async () => {
+    const secretStore = new MemorySecretStore();
+    secretStore.values.set(
+      "runner:device:profile-scope",
+      "user_identifier_0001",
+    );
+    let opened: Record<string, string> | null = null;
+    let closeListener: (() => void) | null = null;
+    const { app } = buildRunner({
+      config,
+      secretStore,
+      pairingCode: "123456",
+      now: () => 1_000,
+      detectInstalledBrowsers: async () => [
+        {
+          kind: "brave",
+          label: "Brave Browser",
+          executablePath: "/synthetic/brave",
+        },
+      ],
+      openIsolatedProfileForAuthorization: async (options) => {
+        opened = options;
+        return {
+          close: async () => undefined,
+          onClose: (listener) => {
+            closeListener = listener;
+          },
+        };
+      },
+    });
+    openApps.push(app);
+    const pair = await app.inject({
+      method: "POST",
+      url: "/v1/pair",
+      headers: { origin: config.webOrigin, "x-osa-request": "settings" },
+      payload: { code: "123456" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/browser-profile/authorize",
+      headers: {
+        origin: config.webOrigin,
+        "x-osa-request": "settings",
+        cookie: pair.headers["set-cookie"] as string,
+      },
+      payload: {
+        browserKind: "brave",
+        destinationUrl: "https://social.example/feed/acme",
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      status: "opened",
+      loginVerified: false,
+      browserKind: "brave",
+      destinationOrigin: "https://social.example",
+    });
+    expect(opened).toMatchObject({
+      executablePath: "/synthetic/brave",
+      profilePath:
+        "/tmp/open-social-agent-test/browser-profiles/user_identifier_0001/brave",
+      destinationUrl: "https://social.example/feed/acme",
+    });
+    expect(closeListener).toBeTypeOf("function");
   });
 
   it("keeps consequential processing disabled by default", async () => {

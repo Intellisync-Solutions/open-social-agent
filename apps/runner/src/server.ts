@@ -5,9 +5,12 @@ import {
   detectInstalledBrowsers,
   directVerificationState,
   isolatedProfilePath,
+  openIsolatedProfileForAuthorization,
   withApprovedComputerEnvironment,
+  type BrowserAuthorizationSession,
 } from "@open-social-agent/browser";
 import {
+  BrowserProfileAuthorizationRequestSchema,
   ProviderCapabilityProbeSchema,
   HarnessExecutionResultSchema,
   RunnerPairRequestSchema,
@@ -68,6 +71,8 @@ export function buildRunner(options: {
   claimApprovedRun?: typeof claimApprovedRun;
   submitPublicationReceipt?: typeof submitPublicationReceipt;
   detectInstalledBrowsers?: typeof detectInstalledBrowsers;
+  openIsolatedProfileForAuthorization?:
+    typeof openIsolatedProfileForAuthorization;
   withApprovedComputerEnvironment?: typeof withApprovedComputerEnvironment;
   claimHarnessRun?: typeof claimHarnessRun;
   submitHarnessReceipt?: typeof submitHarnessReceipt;
@@ -89,6 +94,9 @@ export function buildRunner(options: {
     options.submitPublicationReceipt ?? submitPublicationReceipt;
   const detectBrowsers =
     options.detectInstalledBrowsers ?? detectInstalledBrowsers;
+  const openAuthorizationProfile =
+    options.openIsolatedProfileForAuthorization ??
+    openIsolatedProfileForAuthorization;
   const withComputerEnvironment =
     options.withApprovedComputerEnvironment ?? withApprovedComputerEnvironment;
   const claimHarness = options.claimHarnessRun ?? claimHarnessRun;
@@ -99,6 +107,7 @@ export function buildRunner(options: {
   const pairingExpiresAt = now() + pairingDurationMs;
   let pairingConsumed = false;
   const sessions = new Map<string, number>();
+  const browserSessions = new Map<string, BrowserAuthorizationSession>();
 
   app.register(cookie, {
     secret: randomBytes(32).toString("hex"),
@@ -199,11 +208,84 @@ export function buildRunner(options: {
       await options.secretStore.set("runner:device:token", parsed.data.token);
       await options.secretStore.set("runner:device:id", parsed.data.runnerId);
       await options.secretStore.set("runner:device:site", siteUrl);
+      await options.secretStore.set(
+        "runner:device:profile-scope",
+        parsed.data.profileScope,
+      );
       return reply.code(201).send({
         status: "registered",
         runnerId: parsed.data.runnerId,
         tokenStored: true,
       });
+    },
+  );
+
+  app.post(
+    "/v1/browser-profile/authorize",
+    {
+      config: { rateLimit: { max: 3, timeWindow: 60_000 } },
+      preHandler: authorize,
+    },
+    async (request, reply) => {
+      const parsed = BrowserProfileAuthorizationRequestSchema.safeParse(
+        request.body,
+      );
+      if (!parsed.success)
+        return reply
+          .code(400)
+          .send(errorEnvelope(request.id, "BROWSER_PROFILE_INPUT_INVALID"));
+      const profileScope = await options.secretStore.get(
+        "runner:device:profile-scope",
+      );
+      if (!profileScope)
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "RUNNER_DEVICE_MISSING"));
+      const browser = (await detectBrowsers()).find(
+        (candidate) => candidate.kind === parsed.data.browserKind,
+      );
+      if (!browser)
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "BROWSER_NOT_AVAILABLE"));
+      const existing = browserSessions.get(parsed.data.browserKind);
+      if (existing)
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "BROWSER_PROFILE_ALREADY_OPEN"));
+      try {
+        const authorization = await openAuthorizationProfile({
+          executablePath: browser.executablePath,
+          profilePath: isolatedProfilePath(
+            options.config.dataDirectory,
+            profileScope,
+            parsed.data.browserKind,
+          ),
+          destinationUrl: parsed.data.destinationUrl,
+        });
+        browserSessions.set(parsed.data.browserKind, authorization);
+        authorization.onClose(() => {
+          browserSessions.delete(parsed.data.browserKind);
+        });
+        const marker = {
+          browserKind: parsed.data.browserKind,
+          destinationOrigin: new URL(parsed.data.destinationUrl).origin,
+          openedAt: now(),
+        };
+        await options.secretStore.set(
+          "browser:profile-opened:v1",
+          JSON.stringify(marker),
+        );
+        return reply.code(202).send({
+          status: "opened",
+          ...marker,
+          loginVerified: false,
+        });
+      } catch {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "BROWSER_PROFILE_OPEN_FAILED"));
+      }
     },
   );
 
@@ -399,19 +481,23 @@ export function buildRunner(options: {
     },
   );
 
-  app.get("/v1/session", { preHandler: authorize }, async () => ({
-    status: "paired",
-    execution: {
-      generationEnabled: options.config.generationEnabled,
-      computerEnabled: options.config.computerEnabled,
-      pollingEnabled: options.config.pollingEnabled,
-      pollingIntervalMs: options.config.pollingIntervalMs,
-    },
-    browsers: (await detectBrowsers()).map(({ kind, label }) => ({
-      kind,
-      label,
-    })),
-  }));
+  app.get("/v1/session", { preHandler: authorize }, async () => {
+    const marker = await options.secretStore.get("browser:profile-opened:v1");
+    return {
+      status: "paired",
+      execution: {
+        generationEnabled: options.config.generationEnabled,
+        computerEnabled: options.config.computerEnabled,
+        pollingEnabled: options.config.pollingEnabled,
+        pollingIntervalMs: options.config.pollingIntervalMs,
+      },
+      browsers: (await detectBrowsers()).map(({ kind, label }) => ({
+        kind,
+        label,
+      })),
+      browserProfile: parseBrowserProfileMarker(marker),
+    };
+  });
 
   app.get<{ Params: { provider: string } }>(
     "/v1/provider-secrets/:provider",
@@ -538,6 +624,13 @@ export function buildRunner(options: {
     void reply
       .code(500)
       .send(errorEnvelope(request.id, "RUNNER_INTERNAL_ERROR"));
+  });
+
+  app.addHook("onClose", async () => {
+    await Promise.all(
+      [...browserSessions.values()].map((session) => session.close()),
+    );
+    browserSessions.clear();
   });
 
   async function authorize(request: FastifyRequest, reply: FastifyReply) {
@@ -687,4 +780,43 @@ function providerProbeResult(
       usage: "unverified" as const,
     },
   };
+}
+
+function parseBrowserProfileMarker(value: string | null) {
+  if (!value) return null;
+  try {
+    const raw = JSON.parse(value) as Record<string, unknown>;
+    const browserKind =
+      BrowserProfileAuthorizationRequestSchema.shape.browserKind.safeParse(
+        raw.browserKind,
+      );
+    return browserKind.success &&
+      typeof raw.destinationOrigin === "string" &&
+      isSafeHttpsOrigin(raw.destinationOrigin) &&
+      typeof raw.openedAt === "number" &&
+      Number.isFinite(raw.openedAt)
+      ? {
+          browserKind: browserKind.data,
+          destinationOrigin: raw.destinationOrigin,
+          openedAt: raw.openedAt,
+          loginVerified: false,
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSafeHttpsOrigin(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      url.href === `${url.origin}/`
+    );
+  } catch {
+    return false;
+  }
 }

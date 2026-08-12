@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as onboarding from "../onboarding.js";
 import type * as outputs from "../outputs.js";
 import type * as receipts from "../receipts.js";
+import type * as runHistory from "../runHistory.js";
 import type * as runnerHttp from "../runnerHttp.js";
 import type * as runners from "../runners.js";
 import type * as schedules from "../schedules.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   onboarding: typeof onboarding;
   outputs: typeof outputs;
   receipts: typeof receipts;
+  runHistory: typeof runHistory;
   runnerHttp: typeof runnerHttp;
   runners: typeof runners;
   schedules: typeof schedules;

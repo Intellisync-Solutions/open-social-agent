@@ -63,6 +63,7 @@ export const RunnerProvisionResultSchema = z.object({
   registrationId: z.string().min(1).max(200),
   runnerId: RunnerIdSchema,
   token: RunnerDeviceTokenSchema,
+  profileScope: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/),
 });
 
 export const RunnerClaimRequestSchema = z.object({
@@ -112,6 +113,12 @@ export const RunnerDeviceRegistrationSchema = z.object({
   runnerId: RunnerIdSchema,
   token: RunnerDeviceTokenSchema,
   siteUrl: z.string().url().max(500),
+  profileScope: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/),
+});
+
+export const BrowserProfileAuthorizationRequestSchema = z.object({
+  browserKind: z.enum(["brave", "chrome", "edge", "chromium"]),
+  destinationUrl: z.string().url().max(2_000),
 });
 
 export const RunnerProcessRequestSchema = z.object({

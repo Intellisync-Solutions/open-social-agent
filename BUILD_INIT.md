@@ -1,7 +1,7 @@
 ---
 title: Open Social Agent Architecture
 architecture_status: approved
-implementation_status: partial
+implementation_status: current
 version: 0.1
 owner: IntelliSync
 last_reviewed: 2026-08-10
@@ -94,10 +94,14 @@ would send, post, submit, or represent the user to a third party.
 - Authenticated editorial operator desk for profile/destination and schedule
   lifecycle, runs, evidence-backed drafts, exact approvals, receipts, trusted
   runner registration, and explicit one-item processing
+- Restartable onboarding; original-output and tool-execution inspection;
+  pre-provider daily token reservation; terminal run cancel/archive/restore and
+  evidence-safe purge; and manual isolated-profile browser authorization
 
-The minute-level due-run cron and opt-in local generation polling are
-implemented. OpenAI search/computer live-provider verification and real-account
-publication verification remain planned.
+The approved V1 code boundary is implemented, including minute-level due-run
+reconciliation and opt-in local generation polling. OpenAI search/computer
+live-provider verification and real-account publication verification remain
+explicit release-evidence gates, not missing product architecture.
 OpenAI structured composition is
 verified for Luna with search disabled; the computer loop is deterministic and
 locally dry-run only.
@@ -166,8 +170,9 @@ V1 is self-hosted and local-first:
 - Browser login cookies and profile data never leave the local machine.
 
 The operator's machine must be awake and the runner connected for research,
-composition, or browser execution. Missed runs become `delayed` and are offered
-for manual retry; they are not blindly replayed.
+composition, or browser execution. After downtime, due-run reconciliation
+coalesces stale occurrences into the latest preparation, records how many were
+skipped, and never blindly replays old content.
 
 Production hosting of the UI without a trusted local runner is not V1-complete
 because a hosted page cannot safely control a user-selected local browser.
@@ -200,22 +205,20 @@ policy.
 
 ## 6. Data model and ownership
 
-All durable records are scoped by authenticated `userId`. Proposed tables:
+All durable records are scoped by authenticated `userId`. V1 implements these
+logical records, combining tightly coupled policy aggregates where a separate
+table has not demonstrated value:
 
 - `users` and `onboardingDrafts`
-- `providerConfigs` containing metadata/capabilities and a local `secretRef`
-  only; never the key
+- provider metadata inside versioned automation profiles; local secrets remain
+  runner-only and never enter Convex
 - `runnerRegistrations` with scoped, revocable device identity
-- `browserProfiles` containing browser kind, label, authorization state, and a
-  local profile reference only
-- `destinations` containing exact feed URL, origin, allowed paths, status, and
-  authorization evidence
-- `contentProfiles` for topics, persona, tone, style, structure, constraints
-- `researchPolicies` for enabled tools, domains, citation and freshness rules
-- `modelPolicies` for route assignments, models, reasoning, output limits,
-  per-run and daily gates
+- local browser-profile markers containing browser kind, exact destination,
+  opened time, and explicit unverified-login state
+- `automationProfiles` containing the exact destination and content, research,
+  and model policies as one versioned lifecycle aggregate
 - `schedules` for recurrence, timezone, next due time, status, and revision
-- `runs` and `runSteps` for immutable configuration snapshots and lifecycle
+- `runs` for immutable configuration snapshots and lifecycle
 - `toolExecutions` for selected/skipped/called/completed/failed evidence
 - `evidenceItems` for URL, title, publisher, retrieved time, excerpt hash,
   bounded content, and claims
@@ -225,7 +228,8 @@ All durable records are scoped by authenticated `userId`. Proposed tables:
   and actor
 - `publicationReceipts` for attempted actions, direct verification, final URL,
   and terminal state
-- `auditEvents` for security- and lifecycle-relevant events
+- existing lifecycle records and receipts provide the V1 audit envelope;
+  a general `auditEvents` stream is deferred until a concrete consumer exists
 
 User-facing delete first archives/tombstones a record. Restore is supported.
 Permanent purge is a separate, exact-confirmation destructive action. Immutable
@@ -310,9 +314,10 @@ The onboarding stepper has persistent progress and Save for later:
 8. schedule, timezone, and missed-run behavior
 9. dry-run review with no social submission
 
-Primary routes are Dashboard, Runs, Drafts, Schedules, Destinations, Profiles,
-Approvals, History, and Settings. Empty, loading, error, disconnected-runner,
-permission, delayed-run, rejected, and blocked states are first-class.
+Primary routes are Dashboard, Runs, Drafts, Schedules, Profiles with their exact
+destination, History, and Settings. Approval is contextual to each draft.
+Empty, loading, error, disconnected-runner, permission, missed-occurrence,
+rejected, and blocked states are first-class.
 
 ## 10. Scheduling and state model
 

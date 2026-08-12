@@ -105,6 +105,11 @@ export type ApprovedComputerEnvironment = {
   renderedText(): Promise<string>;
 };
 
+export type BrowserAuthorizationSession = {
+  close(): Promise<void>;
+  onClose(listener: () => void): void;
+};
+
 export function isolatedProfilePath(
   dataDirectory: string,
   userId: string,
@@ -123,6 +128,73 @@ export function isolatedProfilePath(
 
 export async function ensureIsolatedProfile(path: string): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 });
+}
+
+export async function openIsolatedProfileForAuthorization(options: {
+  executablePath: string;
+  profilePath: string;
+  destinationUrl: string;
+}): Promise<BrowserAuthorizationSession> {
+  assertAllowedAuthorizationOrigin(
+    options.destinationUrl,
+    options.destinationUrl,
+  );
+  await ensureIsolatedProfile(options.profilePath);
+  const context = await chromium.launchPersistentContext(options.profilePath, {
+    executablePath: options.executablePath,
+    headless: false,
+    env: {},
+    args: ["--disable-extensions", "--disable-file-system"],
+  });
+  try {
+    await context.route("**/*", async (route) => {
+      const request = route.request();
+      if (
+        request.isNavigationRequest() &&
+        request.frame().parentFrame() === null
+      ) {
+        try {
+          assertAllowedAuthorizationOrigin(
+            request.url(),
+            options.destinationUrl,
+          );
+        } catch {
+          await route.abort("blockedbyclient");
+          return;
+        }
+      }
+      await route.continue();
+    });
+    const page = context.pages()[0] ?? (await context.newPage());
+    await page.goto(options.destinationUrl, { waitUntil: "domcontentloaded" });
+    assertAllowedAuthorizationOrigin(page.url(), options.destinationUrl);
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
+  return {
+    close: async () => await context.close(),
+    onClose: (listener) => context.on("close", listener),
+  };
+}
+
+export function assertAllowedAuthorizationOrigin(
+  targetUrl: string,
+  destinationUrl: string,
+): void {
+  const target = new URL(targetUrl);
+  const destination = new URL(destinationUrl);
+  if (
+    target.protocol !== "https:" ||
+    destination.protocol !== "https:" ||
+    target.username ||
+    target.password ||
+    destination.username ||
+    destination.password ||
+    target.origin !== destination.origin
+  ) {
+    throw new Error("BROWSER_AUTHORIZATION_ORIGIN_NOT_ALLOWED");
+  }
 }
 
 export function assertAllowedNavigation(

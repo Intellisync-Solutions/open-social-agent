@@ -47,6 +47,12 @@ type ExecutionStatus = {
   pollingEnabled: boolean;
   pollingIntervalMs: number;
 };
+type BrowserProfileStatus = {
+  browserKind: BrowserSummary["kind"];
+  destinationOrigin: string;
+  openedAt: number;
+  loginVerified: false;
+};
 
 export default function ProviderSettingsPage() {
   const registrations = useQuery(api.runners.listMine);
@@ -60,6 +66,8 @@ export default function ProviderSettingsPage() {
     null,
   );
   const [execution, setExecution] = useState<ExecutionStatus | null>(null);
+  const [browserProfile, setBrowserProfile] =
+    useState<BrowserProfileStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [browserKind, setBrowserKind] =
     useState<BrowserSummary["kind"]>("brave");
@@ -94,6 +102,7 @@ export default function ProviderSettingsPage() {
           runnerId: created.runnerId,
           token: created.token,
           siteUrl: convexSiteUrl,
+          profileScope: created.profileScope,
         }),
       });
       setMessage(
@@ -164,6 +173,28 @@ export default function ProviderSettingsPage() {
     }
   }
 
+  async function authorizeBrowserProfile(formData: FormData) {
+    setMessage(null);
+    try {
+      const opened = await request("/v1/browser-profile/authorize", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          browserKind,
+          destinationUrl: formData.get("destinationUrl"),
+        }),
+      });
+      setBrowserProfile(opened);
+      setMessage(
+        "The isolated profile opened at the exact destination for manual login. Login remains unverified; close that browser window when finished.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "BROWSER_PROFILE_OPEN_FAILED",
+      );
+    }
+  }
+
   async function checkRunner() {
     setMessage(null);
     setRunnerState("checking");
@@ -173,6 +204,7 @@ export default function ProviderSettingsPage() {
         const session = await request("/v1/session");
         setBrowsers(session.browsers ?? []);
         setExecution(session.execution ?? null);
+        setBrowserProfile(session.browserProfile ?? null);
         setRunnerState("paired");
         await refreshSecret(provider);
       } catch {
@@ -199,6 +231,7 @@ export default function ProviderSettingsPage() {
       const session = await request("/v1/session");
       setBrowsers(session.browsers ?? []);
       setExecution(session.execution ?? null);
+      setBrowserProfile(session.browserProfile ?? null);
       setRunnerState("paired");
       await refreshSecret(provider);
     } catch (error) {
@@ -512,6 +545,57 @@ export default function ProviderSettingsPage() {
                   </p>
                 )}
               </div>
+              <form action={authorizeBrowserProfile} className="settings-block">
+                <h2>Authorize an isolated profile</h2>
+                <p>
+                  Opens the selected installed browser in an app-owned profile
+                  at one exact HTTPS origin. Complete login yourself; the app
+                  never reads your everyday browser profile.
+                </p>
+                <Label htmlFor="authorizationBrowser">Browser</Label>
+                <select
+                  id="authorizationBrowser"
+                  value={browserKind}
+                  onChange={(event) =>
+                    setBrowserKind(event.target.value as BrowserSummary["kind"])
+                  }
+                  disabled={!browsers.length}
+                >
+                  {browsers.map((browser) => (
+                    <option key={browser.kind} value={browser.kind}>
+                      {browser.label}
+                    </option>
+                  ))}
+                </select>
+                <Label htmlFor="destinationUrl">Exact destination URL</Label>
+                <Input
+                  id="destinationUrl"
+                  name="destinationUrl"
+                  type="url"
+                  defaultValue="https://www.linkedin.com/feed/"
+                  pattern="https://.*"
+                  maxLength={2000}
+                  required
+                />
+                <Button
+                  variant="outline"
+                  type="submit"
+                  disabled={!browsers.length}
+                >
+                  <Laptop size={15} /> Open isolated profile
+                </Button>
+                {browserProfile ? (
+                  <div className="capability-result">
+                    <strong>
+                      Profile opened · {browserProfile.browserKind}
+                    </strong>
+                    <span>
+                      {browserProfile.destinationOrigin} · login unverified ·{" "}
+                      {new Date(browserProfile.openedAt).toLocaleString()}
+                    </span>
+                  </div>
+                ) : null}
+              </form>
               <div className="settings-block guarded-actions">
                 <h2>Process one item</h2>
                 <p>

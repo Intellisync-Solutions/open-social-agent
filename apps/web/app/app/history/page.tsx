@@ -15,7 +15,7 @@ export default function HistoryPage() {
   const terminal = runs?.filter((run) =>
     ["live", "pending", "blocked", "failed", "rejected", "cancelled"].includes(
       run.state,
-    ),
+    ) && run.archivedAt === undefined,
   );
   return (
     <AppShell
@@ -56,6 +56,12 @@ export default function HistoryPage() {
                   <div>
                     <dt>Error</dt>
                     <dd>{run.receipt.errorCode}</dd>
+                  </div>
+                ) : null}
+                {!run.receipt?.errorCode && run.blockedCode ? (
+                  <div>
+                    <dt>Block</dt>
+                    <dd>{run.blockedCode}</dd>
                   </div>
                 ) : null}
               </dl>

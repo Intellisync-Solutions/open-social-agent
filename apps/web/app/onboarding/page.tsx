@@ -16,6 +16,7 @@ import {
   KeyRound,
   Save,
   ShieldAlert,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -127,6 +128,7 @@ const initialDraft: OnboardingDraft = {
 
 export default function OnboardingPage() {
   const saved = useQuery(api.onboarding.getMine);
+  const restart = useMutation(api.onboarding.restartMine);
 
   if (saved === undefined) {
     return (
@@ -147,6 +149,9 @@ export default function OnboardingPage() {
       key={saved._id}
       initial={restored.initial}
       initialMessage={restored.message}
+      onRestart={async () => {
+        await restart({});
+      }}
     />
   );
 }
@@ -176,9 +181,11 @@ function parseSavedDraft(draftJson: string): {
 function OnboardingEditor({
   initial,
   initialMessage = null,
+  onRestart,
 }: {
   initial: OnboardingDraft;
   initialMessage?: string | null;
+  onRestart?: () => Promise<void>;
 }) {
   const save = useMutation(api.onboarding.saveMine);
   const [draft, setDraft] = useState(initial);
@@ -247,14 +254,31 @@ function OnboardingEditor({
         <Link className="wordmark" href="/">
           Open Social Agent <span>setup</span>
         </Link>
-        <div className="progress-copy">
-          <strong>
-            {index + 1} / {onboardingStepIds.length}
-          </strong>
-          <span>
-            {Math.round(((index + 1) / onboardingStepIds.length) * 100)}%
-            configured
-          </span>
+        <div className="onboarding-header-actions">
+          {onRestart ? (
+            <button
+              className="restart-setup"
+              onClick={async () => {
+                if (
+                  window.confirm(
+                    "Restart onboarding and permanently remove the saved setup draft? Profiles and history are not changed.",
+                  )
+                )
+                  await onRestart();
+              }}
+            >
+              <RotateCcw size={14} /> Restart setup
+            </button>
+          ) : null}
+          <div className="progress-copy">
+            <strong>
+              {index + 1} / {onboardingStepIds.length}
+            </strong>
+            <span>
+              {Math.round(((index + 1) / onboardingStepIds.length) * 100)}%
+              configured
+            </span>
+          </div>
         </div>
       </header>
       <div className="progress-track" aria-hidden="true">

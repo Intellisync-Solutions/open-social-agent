@@ -3,6 +3,10 @@
 Status: approved policy for architecture version 0.1. Individual controls remain
 unverified until their implementation slice records deterministic evidence.
 
+Production dependencies are audited at release. V1 pins Auth.js core at or
+above 0.41.3 to include the August 2026 email-normalization and malformed-Bearer
+header fixes.
+
 ## Protected assets
 
 - provider API keys and provider account metadata
@@ -78,6 +82,16 @@ listing is not proof of publication.
   confirmation and preserves only the minimum legally/security-required audit
   envelope.
 - Retention durations must be owner-approved before a hosted deployment.
+- In self-hosted V1, records have no automatic expiry. Operators may archive
+  terminal runs and permanently purge only evidence-free run envelopes after
+  exact trace confirmation. Any output, tool, evidence, evaluation, approval,
+  execution claim, or publication receipt makes the run non-purgeable.
+- Purging an unapproved draft removes its revisions, research/tool records,
+  admitted evidence, and evaluation in one mutation, then retains a cancelled
+  run envelope with the trace and original-output hash. Approved outputs and
+  publication receipts cannot be purged.
+- Daily model usage is counted by UTC day. The runner may claim new paid work
+  only when the remaining configured daily gate can cover the full per-run gate.
 
 ## Logging and reporting
 

@@ -27,6 +27,7 @@ export const provisionMine = mutation({
     registrationId: v.id("runnerRegistrations"),
     runnerId: v.string(),
     token: v.string(),
+    profileScope: v.string(),
   }),
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -52,7 +53,7 @@ export const provisionMine = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    return { registrationId, runnerId, token };
+    return { registrationId, runnerId, token, profileScope: String(userId) };
   },
 });
 
@@ -239,8 +240,87 @@ export const claimQueuedInternal = internalMutation({
     }
     const replay = await ctx.db.query("harnessClaims").withIndex("by_runnerId_and_requestId", (q) => q.eq("runnerId", args.runnerId).eq("requestId", args.requestId)).unique();
     if (replay) return await harnessClaimPayload(ctx, replay, args.now);
+    const userClaims = await ctx.db
+      .query("harnessClaims")
+      .withIndex("by_userId_and_status", (q) =>
+        q.eq("userId", args.userId).eq("status", "claimed"),
+      )
+      .take(20);
+    for (const active of userClaims) {
+      if (active.leaseExpiresAt > args.now) return null;
+      const activeRun = await ctx.db.get("runs", active.runId);
+      await ctx.db.patch(active._id, {
+        status: "completed",
+        updatedAt: args.now,
+      });
+      if (activeRun?.state === "claimed") {
+        await ctx.db.patch(activeRun._id, {
+          state: "failed",
+          blockedCode: "HARNESS_LEASE_EXPIRED",
+          updatedAt: args.now,
+        });
+      }
+    }
     const run = (await ctx.db.query("runs").withIndex("by_userId_and_state", (q) => q.eq("userId", args.userId).eq("state", "queued")).order("asc").take(1))[0];
     if (!run) return null;
+    let snapshotRaw: unknown;
+    try {
+      snapshotRaw = JSON.parse(run.configurationSnapshotJson);
+    } catch {
+      await ctx.db.patch(run._id, {
+        state: "blocked",
+        blockedCode: "RUN_SNAPSHOT_INVALID",
+        updatedAt: args.now,
+      });
+      return null;
+    }
+    const snapshot = ConfigurationSnapshotSchema.safeParse(snapshotRaw);
+    if (!snapshot.success) {
+      await ctx.db.patch(run._id, {
+        state: "blocked",
+        blockedCode: "RUN_SNAPSHOT_INVALID",
+        updatedAt: args.now,
+      });
+      return null;
+    }
+    const startOfUtcDay = Math.floor(args.now / 86_400_000) * 86_400_000;
+    const [dailyOutputs, dailyTools] = await Promise.all([
+      ctx.db
+        .query("outputs")
+        .withIndex("by_userId_and_createdAt", (q) =>
+          q.eq("userId", args.userId).gte("createdAt", startOfUtcDay),
+        )
+        .take(500),
+      ctx.db
+        .query("toolExecutions")
+        .withIndex("by_userId_and_createdAt", (q) =>
+          q.eq("userId", args.userId).gte("createdAt", startOfUtcDay),
+        )
+        .take(500),
+    ]);
+    if (dailyOutputs.length >= 500 || dailyTools.length >= 500) {
+      await ctx.db.patch(run._id, {
+        state: "blocked",
+        blockedCode: "DAILY_USAGE_SCAN_LIMIT",
+        updatedAt: args.now,
+      });
+      return null;
+    }
+    const consumedTokens = [...dailyOutputs, ...dailyTools].reduce(
+      (total, record) => total + record.totalTokens,
+      0,
+    );
+    if (
+      consumedTokens + snapshot.data.profile.model.perRunTokenGate >
+      snapshot.data.profile.model.dailyTokenGate
+    ) {
+      await ctx.db.patch(run._id, {
+        state: "blocked",
+        blockedCode: "DAILY_TOKEN_GATE_REACHED",
+        updatedAt: args.now,
+      });
+      return null;
+    }
     const existing = await ctx.db.query("harnessClaims").withIndex("by_runId", (q) => q.eq("runId", run._id)).unique();
     if (existing) return null;
     const leaseExpiresAt = args.now + 15 * 60 * 1000;
@@ -258,6 +338,17 @@ export const claimQueuedInternal = internalMutation({
 async function harnessClaimPayload(ctx: MutationCtx, claim: Doc<"harnessClaims">, now: number) {
   const run = await ctx.db.get("runs", claim.runId);
   if (claim.status !== "claimed" || claim.leaseExpiresAt <= now || !run || run.state !== "claimed" || run.userId !== claim.userId) return null;
+  const registration = await ctx.db.get(
+    "runnerRegistrations",
+    claim.runnerRegistrationId,
+  );
+  if (
+    !registration ||
+    registration.status !== "active" ||
+    registration.userId !== claim.userId ||
+    registration.runnerId !== claim.runnerId
+  )
+    return null;
   let snapshot: unknown;
   try { snapshot = JSON.parse(run.configurationSnapshotJson); } catch { return null; }
   const parsed = ConfigurationSnapshotSchema.safeParse(snapshot);
@@ -278,6 +369,10 @@ async function claimPayload(
   if (claim.status !== "claimed") return null;
   const run = await ctx.db.get("runs", claim.runId);
   const approval = await ctx.db.get("approvals", claim.approvalId);
+  const registration = await ctx.db.get(
+    "runnerRegistrations",
+    claim.runnerRegistrationId,
+  );
   if (
     claim.leaseExpiresAt <= now ||
     !run ||
@@ -285,7 +380,11 @@ async function claimPayload(
     run.state !== "executing" ||
     approval.expiresAt <= now ||
     run.userId !== claim.userId ||
-    approval.userId !== claim.userId
+    approval.userId !== claim.userId ||
+    !registration ||
+    registration.status !== "active" ||
+    registration.userId !== claim.userId ||
+    registration.runnerId !== claim.runnerId
   ) {
     await closeStaleClaim(ctx, claim, run, now);
     return null;
