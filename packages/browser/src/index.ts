@@ -5,6 +5,7 @@ import { resolve, sep } from "node:path";
 import type { BrowserActionSchema } from "@open-social-agent/contracts";
 import type { z } from "zod";
 import { chromium, type BrowserContext } from "playwright-core";
+import type { Page } from "playwright-core";
 
 export type SupportedBrowserKind = "brave" | "chrome" | "edge" | "chromium";
 
@@ -91,6 +92,18 @@ async function isExecutable(path: string): Promise<boolean> {
 
 export type BrowserAction = z.infer<typeof BrowserActionSchema>;
 
+export type ComputerExecutionPolicy = {
+  allowedDestinationUrl: string;
+  approvedBody: string;
+  viewport: { width: number; height: number };
+  allowLoopbackHttp?: boolean;
+};
+
+export type ApprovedComputerEnvironment = {
+  execute(actions: BrowserAction[]): Promise<void>;
+  screenshot(): Promise<{ imageDataUrl: string; currentUrl: string }>;
+};
+
 export function isolatedProfilePath(
   dataDirectory: string,
   userId: string,
@@ -139,7 +152,7 @@ export function assertAllowedNavigation(
 
 export function validateBrowserAction(
   action: BrowserAction,
-  options: { allowedDestinationUrl: string; approvedBody: string },
+  options: ComputerExecutionPolicy,
 ): BrowserAction {
   if (action.type === "navigate") {
     assertAllowedNavigation(action.url, options.allowedDestinationUrl);
@@ -147,7 +160,152 @@ export function validateBrowserAction(
   if (action.type === "type" && action.text !== options.approvedBody) {
     throw new Error("APPROVAL_CONTENT_MISMATCH");
   }
+  for (const point of actionCoordinates(action)) {
+    if (
+      point.x >= options.viewport.width ||
+      point.y >= options.viewport.height
+    ) {
+      throw new Error("COMPUTER_COORDINATE_OUT_OF_BOUNDS");
+    }
+  }
+  if (
+    "keys" in action &&
+    action.type !== "keypress" &&
+    action.keys &&
+    action.keys.length > 0
+  ) {
+    throw new Error("COMPUTER_MODIFIERS_UNSUPPORTED");
+  }
   return action;
+}
+
+export async function executeComputerActions(
+  page: Page,
+  actions: BrowserAction[],
+  policy: ComputerExecutionPolicy,
+): Promise<void> {
+  if (actions.length < 1 || actions.length > 25) {
+    throw new Error("COMPUTER_ACTION_BATCH_INVALID");
+  }
+  for (const unvalidated of actions) {
+    const action = validateBrowserAction(unvalidated, policy);
+    switch (action.type) {
+      case "navigate":
+        await page.goto(action.url, { waitUntil: "domcontentloaded" });
+        assertAllowedNavigation(page.url(), policy.allowedDestinationUrl, {
+          allowLoopbackHttp: policy.allowLoopbackHttp,
+        });
+        break;
+      case "click":
+        await page.mouse.click(action.x, action.y, {
+          button: normalizeMouseButton(action.button),
+        });
+        break;
+      case "double_click":
+        await page.mouse.dblclick(action.x, action.y);
+        break;
+      case "drag": {
+        const [start, ...rest] = action.path;
+        if (!start) throw new Error("COMPUTER_DRAG_INVALID");
+        await page.mouse.move(start.x, start.y);
+        await page.mouse.down();
+        for (const point of rest) await page.mouse.move(point.x, point.y);
+        await page.mouse.up();
+        break;
+      }
+      case "keypress":
+        for (const key of action.keys) {
+          await page.keyboard.press(normalizeKey(key));
+        }
+        break;
+      case "move":
+        await page.mouse.move(action.x, action.y);
+        break;
+      case "screenshot":
+        break;
+      case "scroll":
+        await page.mouse.move(action.x, action.y);
+        await page.mouse.wheel(action.scroll_x, action.scroll_y);
+        break;
+      case "type":
+        await page.keyboard.type(action.text);
+        break;
+      case "wait":
+        await page.waitForTimeout(2_000);
+        break;
+    }
+    assertAllowedNavigation(page.url(), policy.allowedDestinationUrl, {
+      allowLoopbackHttp: policy.allowLoopbackHttp,
+    });
+  }
+}
+
+export async function withApprovedComputerEnvironment<T>(
+  options: {
+    executablePath: string;
+    profilePath: string;
+    destinationUrl: string;
+    approvedBody: string;
+    headless?: boolean;
+    allowLoopbackHttp?: boolean;
+    viewport?: { width: number; height: number };
+  },
+  task: (environment: ApprovedComputerEnvironment) => Promise<T>,
+): Promise<T> {
+  await ensureIsolatedProfile(options.profilePath);
+  const viewport = options.viewport ?? { width: 1280, height: 720 };
+  const context = await chromium.launchPersistentContext(options.profilePath, {
+    executablePath: options.executablePath,
+    headless: options.headless ?? false,
+    viewport,
+    env: {},
+    args: ["--disable-extensions", "--disable-file-system"],
+  });
+  try {
+    await context.route("**/*", async (route) => {
+      const request = route.request();
+      if (
+        request.isNavigationRequest() &&
+        request.frame().parentFrame() === null
+      ) {
+        try {
+          assertAllowedNavigation(request.url(), options.destinationUrl, {
+            allowLoopbackHttp: options.allowLoopbackHttp,
+          });
+        } catch {
+          await route.abort("blockedbyclient");
+          return;
+        }
+      }
+      await route.continue();
+    });
+    const page = context.pages()[0] ?? (await context.newPage());
+    await page.goto(options.destinationUrl, { waitUntil: "domcontentloaded" });
+    assertAllowedNavigation(page.url(), options.destinationUrl, {
+      allowLoopbackHttp: options.allowLoopbackHttp,
+    });
+    const policy: ComputerExecutionPolicy = {
+      allowedDestinationUrl: options.destinationUrl,
+      approvedBody: options.approvedBody,
+      viewport,
+      allowLoopbackHttp: options.allowLoopbackHttp,
+    };
+    return await task({
+      execute: async (actions) => executeComputerActions(page, actions, policy),
+      screenshot: async () => {
+        assertAllowedNavigation(page.url(), options.destinationUrl, {
+          allowLoopbackHttp: options.allowLoopbackHttp,
+        });
+        const bytes = await page.screenshot({ type: "png" });
+        return {
+          imageDataUrl: `data:image/png;base64,${bytes.toString("base64")}`,
+          currentUrl: page.url(),
+        };
+      },
+    });
+  } finally {
+    await context.close();
+  }
 }
 
 export function directVerificationState(input: {
@@ -172,6 +330,63 @@ function pathWithin(target: string, allowed: string): boolean {
   return target === allowed || target.startsWith(base);
 }
 
+function actionCoordinates(action: BrowserAction): Array<{ x: number; y: number }> {
+  switch (action.type) {
+    case "click":
+    case "double_click":
+    case "move":
+    case "scroll":
+      return [{ x: action.x, y: action.y }];
+    case "drag":
+      return action.path;
+    default:
+      return [];
+  }
+}
+
+function normalizeMouseButton(
+  button: "left" | "right" | "wheel" | "back" | "forward",
+): "left" | "right" | "middle" {
+  if (button === "wheel") return "middle";
+  if (button === "left" || button === "right") return button;
+  throw new Error("COMPUTER_MOUSE_BUTTON_UNSUPPORTED");
+}
+
+function normalizeKey(key: string): string {
+  const keyMap: Record<string, string> = {
+    ENTER: "Enter",
+    RETURN: "Enter",
+    ESC: "Escape",
+    ESCAPE: "Escape",
+    TAB: "Tab",
+    SPACE: "Space",
+    BACKSPACE: "Backspace",
+    DELETE: "Delete",
+    DEL: "Delete",
+    HOME: "Home",
+    END: "End",
+    PAGEUP: "PageUp",
+    PAGEDOWN: "PageDown",
+    UP: "ArrowUp",
+    ARROWUP: "ArrowUp",
+    DOWN: "ArrowDown",
+    ARROWDOWN: "ArrowDown",
+    LEFT: "ArrowLeft",
+    ARROWLEFT: "ArrowLeft",
+    RIGHT: "ArrowRight",
+    ARROWRIGHT: "ArrowRight",
+    CTRL: "Control",
+    CONTROL: "Control",
+    SHIFT: "Shift",
+    OPTION: "Alt",
+    ALT: "Alt",
+    META: "Meta",
+    CMD: "Meta",
+    COMMAND: "Meta",
+  };
+  return keyMap[key.toUpperCase()] ?? key;
+}
+
 export async function executeApprovedLocalDryRun(options: {
   executablePath: string;
   profilePath: string;
@@ -186,6 +401,8 @@ export async function executeApprovedLocalDryRun(options: {
     context = await chromium.launchPersistentContext(options.profilePath, {
       executablePath: options.executablePath,
       headless: true,
+      env: {},
+      args: ["--disable-extensions", "--disable-file-system"],
     });
     const page = context.pages()[0] ?? (await context.newPage());
     await page.goto(options.destinationUrl, { waitUntil: "domcontentloaded" });

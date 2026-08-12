@@ -13,6 +13,9 @@ executes model and browser work; the web app and model cannot expand its scope.
   no query/fragment, public DNS results only, pinned lookup, no redirects,
   timeouts, and bounded response bodies.
 - Browser detection returns allowlisted kind/label only. Executable paths stay local.
+- Computer calls are bounded, ordered, and revalidated against the exact
+  destination, viewport, and approved body. Never auto-acknowledge provider
+  safety checks or inherit host environment variables into the browser.
 - Every externally visible action remains out of scope until an exact current
   approval is validated by the publication corridor.
 

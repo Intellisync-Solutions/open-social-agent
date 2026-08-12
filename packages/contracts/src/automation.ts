@@ -136,13 +136,63 @@ export const ApprovalDecisionInputSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
 });
 
-export const BrowserActionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("navigate"), url: z.string().url() }),
-  z.object({ type: z.literal("click"), x: z.number().int().nonnegative(), y: z.number().int().nonnegative() }),
-  z.object({ type: z.literal("type"), text: z.string().max(8_000) }),
+const screenCoordinate = z.number().int().min(0).max(10_000);
+const modifierKeys = z.array(z.string().min(1).max(30)).max(8).nullable().optional();
+
+export const ComputerActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("click"),
+    x: screenCoordinate,
+    y: screenCoordinate,
+    button: z.enum(["left", "right", "wheel", "back", "forward"]),
+    keys: modifierKeys,
+  }),
+  z.object({
+    type: z.literal("double_click"),
+    x: screenCoordinate,
+    y: screenCoordinate,
+    keys: modifierKeys,
+  }),
+  z.object({
+    type: z.literal("drag"),
+    path: z
+      .array(z.object({ x: screenCoordinate, y: screenCoordinate }))
+      .min(2)
+      .max(100),
+    keys: modifierKeys,
+  }),
   z.object({ type: z.literal("keypress"), keys: z.array(z.string().min(1).max(30)).min(1).max(8) }),
-  z.object({ type: z.literal("wait"), milliseconds: z.number().int().min(0).max(5_000) }),
+  z.object({ type: z.literal("move"), x: screenCoordinate, y: screenCoordinate, keys: modifierKeys }),
+  z.object({ type: z.literal("screenshot") }),
+  z.object({
+    type: z.literal("scroll"),
+    x: screenCoordinate,
+    y: screenCoordinate,
+    scroll_x: z.number().int().min(-10_000).max(10_000),
+    scroll_y: z.number().int().min(-10_000).max(10_000),
+    keys: modifierKeys,
+  }),
+  z.object({ type: z.literal("type"), text: z.string().max(8_000) }),
+  z.object({ type: z.literal("wait") }),
 ]);
+
+export const BrowserActionSchema = z.union([
+  ComputerActionSchema,
+  z.object({ type: z.literal("navigate"), url: z.string().url() }),
+]);
+
+export const ComputerSafetyCheckSchema = z.object({
+  id: z.string().min(1).max(200),
+  code: z.string().max(200).nullable().optional(),
+  message: z.string().max(1_000).nullable().optional(),
+});
+
+export const ComputerCallSchema = z.object({
+  type: z.literal("computer_call"),
+  call_id: z.string().min(1).max(200),
+  actions: z.array(ComputerActionSchema).min(1).max(25),
+  pending_safety_checks: z.array(ComputerSafetyCheckSchema).max(20),
+});
 
 export const PublicationReceiptStateSchema = z.enum([
   "live",
@@ -196,6 +246,8 @@ export type DraftOutput = z.infer<typeof DraftOutputSchema>;
 export type ProviderExecutionResult = z.infer<
   typeof ProviderExecutionResultSchema
 >;
+export type ComputerAction = z.infer<typeof ComputerActionSchema>;
+export type ComputerSafetyCheck = z.infer<typeof ComputerSafetyCheckSchema>;
 export type ConfigurationSnapshot = z.infer<
   typeof ConfigurationSnapshotSchema
 >;
