@@ -29,6 +29,12 @@ execution, history, approval, or receipt layers as shipped.
   plan with no external writes
 - `convex`: auth-scoped automation profile/schedule CRUD, idempotent manual and
   bounded internal due-run creation, and immutable configuration snapshots
+- `packages/providers`: centralized OpenAI preset IDs and strict Responses
+  structured-output adapter with provider storage disabled
+- `apps/runner`: operator-opt-in composition route that reads the local key and
+  returns only validated output and bounded usage/latency metadata
+- `convex`: immutable model originals, user revisions, usage fields, archive,
+  restore, and exact-confirmation output purge
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -39,8 +45,8 @@ but no provider secret field or transport.
 - `apps/web`: settings, CRUD, run/approval/history UI beyond onboarding
 - `apps/runner`: local due-run claimant and computer-use execution
 - `packages/contracts`: versioned cross-boundary schemas
-- `packages/harness`: research, provider composition, evidence, evaluation,
-  approval, and receipts beyond the zero-post planner
+- `packages/harness`: provider-backed research, evidence admission, evaluation,
+  approval, and receipts beyond the zero-post/composition guard
 - `packages/browser`: installed-browser detection and isolated execution
 - `packages/providers`: OpenAI and Responses-compatible adapters
 - `packages/scheduling`: missed-run policy beyond implemented recurrence
@@ -66,8 +72,8 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is runner claiming plus bounded research, structured provider
-composition, output persistence, evaluation, and history CRUD. Automatic cron
-activation remains disabled until that end-to-end run path exists. Paid
-generation capabilities remain unverified until an explicitly guarded harness
-test.
+The next slice is runner claiming plus bounded provider-backed research,
+evaluation, approval, and the computer-use corridor. Automatic cron activation
+remains disabled until that end-to-end run path exists. Luna structured output
+is locally verified; Terra, Sol, search, alternate providers, and computer use
+remain unverified.

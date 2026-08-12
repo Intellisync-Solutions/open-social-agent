@@ -78,11 +78,14 @@ would send, post, submit, or represent the user to a third party.
   and exact-confirmation purge rules
 - Timezone-aware recurrence, idempotent run creation, immutable configuration
   snapshots, and a deterministic zero-post harness plan
+- Centralized OpenAI preset registry, opt-in local Responses composition,
+  immutable original outputs, editable revisions, usage telemetry, and history
+  archive/restore/purge
 
-Automatic cron activation, provider generation, research evidence, output and
-history CRUD, approval, computer use, and publication receipts remain planned.
-Provider generation/tool capabilities remain unverified until a guarded test
-run.
+Automatic cron activation, provider-backed web research, approvals, computer
+use, and publication receipts remain planned. OpenAI structured composition is
+verified for Luna with search disabled; other preset/tool combinations remain
+unverified until guarded tests run.
 
 ### Deferred
 

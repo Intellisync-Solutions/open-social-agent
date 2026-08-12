@@ -55,6 +55,10 @@ const enqueueDue = makeFunctionReference<
 const listProfiles = makeFunctionReference<"query">(
   "automationProfiles:listMine",
 );
+const saveModelResult = makeFunctionReference<"mutation">(
+  "outputs:saveModelResultMine",
+);
+const reviseOutput = makeFunctionReference<"mutation">("outputs:reviseMine");
 
 async function authenticatedTest() {
   const t = convexTest(schema, modules);
@@ -154,5 +158,61 @@ describe("auth-scoped automation persistence", () => {
     );
     expect(runs).toHaveLength(1);
     expect(runs[0]?.scheduledFor).toBe(dueAt);
+  });
+
+  it("preserves original model output while user edits create revisions", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Daily signal",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-request-output-0001",
+    });
+    const outputId = await alice.mutation(saveModelResult, {
+      runId,
+      executionJson: JSON.stringify({
+        responseId: "resp_test",
+        requestedModel: "gpt-5.6-terra",
+        actualModel: "gpt-5.6-terra",
+        output: {
+          body: "Original model output.",
+          assumptions: [],
+          riskFlags: [],
+          sourceMap: [],
+        },
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        latencyMs: 25,
+        requestId: "req_test",
+      }),
+    });
+    expect(
+      await alice.mutation(reviseOutput, {
+        outputId,
+        body: "User-edited revision.",
+      }),
+    ).toBe(2);
+    const state = await t.run(async (ctx) => ({
+      output: await ctx.db.get("outputs", outputId),
+      revisions: await ctx.db
+        .query("outputRevisions")
+        .withIndex("by_outputId_and_revision", (q) =>
+          q.eq("outputId", outputId),
+        )
+        .take(3),
+      run: await ctx.db.get("runs", runId),
+    }));
+    expect(state.output?.original.body).toBe("Original model output.");
+    expect(state.output?.currentRevision).toBe(2);
+    expect(state.revisions.map((item) => item.body)).toEqual([
+      "Original model output.",
+      "User-edited revision.",
+    ]);
+    expect(state.run?.state).toBe("awaiting_approval");
   });
 });

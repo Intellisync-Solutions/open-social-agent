@@ -2,6 +2,7 @@
 
 import {
   deriveAllowedOrigin,
+  modelPresetPolicies,
   OnboardingDraftSchema,
   onboardingStepIds,
   type OnboardingDraft,
@@ -85,7 +86,7 @@ const initialDraft: OnboardingDraft = {
   provider: {
     kind: "openai",
     modelPreset: "balanced",
-    modelId: "gpt-5.6-terra",
+    modelId: modelPresetPolicies.balanced.modelId,
     reasoningEffort: "medium",
     maxOutputTokens: 1800,
     perRunTokenGate: 12000,

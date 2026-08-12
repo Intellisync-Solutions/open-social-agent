@@ -56,5 +56,23 @@ RUN_LIVE_PROVIDER_TEST=1 pnpm --filter @open-social-agent/runner verify:provider
 
 The command never performs generation and reports only the visible model count.
 
+Paid composition remains disabled at runner startup. The operator may opt in for
+a controlled run:
+
+```bash
+OSA_ENABLE_GENERATION=1 pnpm start:runner
+```
+
+Maintainers may run the minimal structured-output verification only with an
+already-exported key and an explicit paid-test flag:
+
+```bash
+RUN_LIVE_GENERATION_TEST=1 pnpm --filter @open-social-agent/providers verify:live
+```
+
+This sends no search tool, opens no browser, uses no social destination, and
+performs no external write. It reports model IDs, token counts, and output size,
+never the generated body or key.
+
 Do not put provider keys in environment examples, command history, logs, issue
 reports, screenshots, or Convex.

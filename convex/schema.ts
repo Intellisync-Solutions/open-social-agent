@@ -3,6 +3,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
   contentPolicy,
+  draftOutput,
   destinationPolicy,
   lifecycleStatus,
   modelPolicy,
@@ -76,4 +77,33 @@ export default defineSchema({
     .index("by_userId_and_state", ["userId", "state"])
     .index("by_scheduleId", ["scheduleId"])
     .index("by_occurrenceKey", ["occurrenceKey"]),
+  outputs: defineTable({
+    userId: v.id("users"),
+    runId: v.id("runs"),
+    original: draftOutput,
+    originalHash: v.string(),
+    currentRevision: v.number(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    providerResponseId: v.string(),
+    requestedModel: v.string(),
+    actualModel: v.string(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    totalTokens: v.number(),
+    latencyMs: v.number(),
+    providerRequestId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_and_status", ["userId", "status"])
+    .index("by_runId", ["runId"]),
+  outputRevisions: defineTable({
+    userId: v.id("users"),
+    outputId: v.id("outputs"),
+    revision: v.number(),
+    body: v.string(),
+    bodyHash: v.string(),
+    actor: v.union(v.literal("model"), v.literal("user")),
+    createdAt: v.number(),
+  }).index("by_outputId_and_revision", ["outputId", "revision"]),
 });
