@@ -8,6 +8,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 
 export * from "./computer";
+export * from "./research";
 
 export const modelPresets = modelPresetPolicies;
 
@@ -94,7 +95,7 @@ function buildInstructions(snapshot: ConfigurationSnapshot): string {
     `Custom instructions: ${content.customInstructions || "none"}`,
     `Exclusions: ${content.exclusions.join(", ") || "none"}`,
     `Citations required: ${research.citationsRequired ? "yes" : "no"}`,
-    "Never invent a source. Every source URL must appear verbatim in the evidence packet.",
+    "Never invent a source. Every source-map entry must cite admitted evidence IDs from the evidence packet.",
     "Do not attempt or describe browser actions, posting, authentication, or approval.",
   ].join("\n");
 }

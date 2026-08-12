@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ConfigurationSnapshotSchema, HarnessExecutionResultSchema } from "./automation";
 
 export const RunnerProviderKindSchema = z.enum([
   "openai",
@@ -118,6 +119,43 @@ export const RunnerProcessRequestSchema = z.object({
   browserKind: z.enum(["brave", "chrome", "edge", "chromium"]),
 });
 
+export const RunnerHarnessClaimRequestSchema = z.object({
+  runnerId: RunnerIdSchema,
+  requestId: RunnerRequestIdSchema,
+});
+
+export const RunnerHarnessClaimResponseSchema = z.object({
+  userId: z.string().min(1).max(200),
+  registrationId: z.string().min(1).max(200),
+  runId: z.string().min(1).max(200),
+  executionRequestId: RunnerRequestIdSchema,
+  leaseExpiresAt: z.number().int().positive(),
+  snapshot: ConfigurationSnapshotSchema,
+  recentBodies: z.array(z.string().min(1).max(8_000)).max(20),
+});
+
+export const RunnerHarnessReceiptRequestSchema = z.discriminatedUnion("state", [
+  z.object({
+    state: z.literal("completed"),
+    runnerId: RunnerIdSchema,
+    runId: z.string().min(1).max(200),
+    executionRequestId: RunnerRequestIdSchema,
+    result: HarnessExecutionResultSchema,
+  }),
+  z.object({
+    state: z.literal("failed"),
+    runnerId: RunnerIdSchema,
+    runId: z.string().min(1).max(200),
+    executionRequestId: RunnerRequestIdSchema,
+    errorCode: z.string().regex(/^[A-Z0-9_]+$/).max(120),
+  }),
+]);
+
+export const RunnerHarnessProcessRequestSchema = z.object({
+  requestId: RunnerRequestIdSchema,
+});
+
 export type RunnerProviderKind = z.infer<typeof RunnerProviderKindSchema>;
 export type RunnerSecretInput = z.infer<typeof RunnerSecretInputSchema>;
 export type RunnerClaimResponse = z.infer<typeof RunnerClaimResponseSchema>;
+export type RunnerHarnessClaimResponse = z.infer<typeof RunnerHarnessClaimResponseSchema>;

@@ -131,5 +131,14 @@ with an idempotency ID and browser kind. This endpoint processes at most one
 claim; it is not a polling loop, cron activation, or permission to post to an
 unspecified account.
 
+The same paired runner exposes `POST /v1/process-harness` for one explicit
+queued-run claim. The server supplies the immutable configuration snapshot and
+recent user history. When research is enabled, OpenAI `web_search` is required,
+restricted to configured domains, and stored with bounded evidence metadata.
+Unknown citations, known-stale evidence, exclusions, token-gate overruns, and
+likely duplicates block the run before approval. Unavailable publication dates
+remain a visible freshness warning. This endpoint is also disabled unless
+`OSA_ENABLE_GENERATION=1`; no background polling is active.
+
 Do not put provider keys in environment examples, command history, logs, issue
 reports, screenshots, or Convex.

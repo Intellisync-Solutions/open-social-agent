@@ -50,6 +50,12 @@ execution, history, approval, or receipt layers as shipped.
   idempotent approval claims, bounded leases, and claim-bound terminal receipts
 - `apps/runner`: HTTPS-only Convex bridge, local-only raw device token storage,
   and explicitly gated one-run processing with direct-body verification
+- `packages/providers`: Responses `web_search` adapter with required execution,
+  exact domain filters, source/citation parsing, and deterministic evidence IDs
+- `packages/harness`: evidence-packet admission plus deterministic citation,
+  freshness, exclusion, topic, token-budget, and recent-output duplicate gates
+- `convex`: leased queued-run harness claims and durable tool, evidence, and
+  server-recomputed evaluation records; failed evaluations cannot reach approval
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -87,9 +93,9 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is bounded provider-backed research and evaluation, followed by
-runner polling. Automatic cron remains disabled until that end-to-end path
-exists. Luna structured output and the synthetic-provider
+The next slice is the authenticated V1 CRUD and review UI, followed by runner
+polling. Automatic cron remains disabled until those end-to-end paths exist.
+Luna structured output, synthetic-provider research, and the synthetic-provider
 computer loop over a controlled browser are locally verified; Terra, Sol,
-search, alternate providers, live-provider computer use, and real social
+live search, alternate providers, live-provider computer use, and real social
 accounts remain unverified.

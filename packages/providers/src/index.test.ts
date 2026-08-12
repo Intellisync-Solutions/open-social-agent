@@ -63,7 +63,7 @@ describe("OpenAI provider adapter", () => {
         body: "Evidence first.",
         assumptions: [],
         riskFlags: [],
-        sourceMap: [],
+        sourceMap: [{ claim: "Evidence first.", evidenceIds: ["ev_0123456789abcdef"] }],
       }),
       usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30 },
       _request_id: "req_test",
@@ -74,7 +74,7 @@ describe("OpenAI provider adapter", () => {
     const result = await provider.compose({
       apiKey: "synthetic-test-key",
       snapshot,
-      evidencePacket: "No admitted evidence.",
+      evidencePacket: JSON.stringify({ evidence: [{ id: "ev_0123456789abcdef" }] }),
     });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({

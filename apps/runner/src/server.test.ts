@@ -199,51 +199,6 @@ describe("local runner security boundary", () => {
     });
   });
 
-  it("keeps the provider key inside the runner during composition", async () => {
-    const secretStore = new MemorySecretStore();
-    secretStore.values.set("provider:openai:default", "synthetic-openai-key-for-runner-test");
-    let observedKey = "";
-    const { app } = buildRunner({
-      config: { ...config, generationEnabled: true },
-      secretStore,
-      pairingCode: "123456",
-      providerAdapter: {
-        compose: async ({ apiKey, snapshot }) => {
-          observedKey = apiKey;
-          return {
-            responseId: "resp_test",
-            requestedModel: snapshot.profile.model.modelId,
-            actualModel: snapshot.profile.model.modelId,
-            output: { body: "Evidence first.", assumptions: [], riskFlags: [], sourceMap: [] },
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            latencyMs: 25,
-            requestId: "req_test",
-          };
-        },
-      },
-    });
-    openApps.push(app);
-    const pair = await app.inject({
-      method: "POST",
-      url: "/v1/pair",
-      headers: { origin: config.webOrigin, "x-osa-request": "settings" },
-      payload: { code: "123456" },
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: "/v1/compose",
-      headers: {
-        origin: config.webOrigin,
-        "x-osa-request": "execution",
-        cookie: pair.headers["set-cookie"] as string,
-      },
-      payload: { snapshot: testSnapshot(), evidencePacket: "Source: https://openai.com" },
-    });
-    expect(response.statusCode).toBe(200);
-    expect(observedKey).toBe("synthetic-openai-key-for-runner-test");
-    expect(response.body).not.toContain(observedKey);
-  });
-
   it("keeps generation disabled unless the operator opts in", async () => {
     const secretStore = new MemorySecretStore();
     secretStore.values.set("provider:openai:default", "synthetic-openai-key-for-runner-test");
@@ -257,16 +212,79 @@ describe("local runner security boundary", () => {
     });
     const response = await app.inject({
       method: "POST",
-      url: "/v1/compose",
+      url: "/v1/process-harness",
       headers: {
         origin: config.webOrigin,
         "x-osa-request": "execution",
         cookie: pair.headers["set-cookie"] as string,
       },
-      payload: { snapshot: testSnapshot(), evidencePacket: "Source: https://openai.com" },
+      payload: { requestId: "harness-execution-0001" },
     });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ error: { code: "GENERATION_DISABLED" } });
+  });
+
+  it("runs the research, composition, and deterministic evaluation corridor", async () => {
+    const secretStore = new MemorySecretStore();
+    const apiKey = "synthetic-openai-key-for-runner-test";
+    secretStore.values.set("provider:openai:default", apiKey);
+    secretStore.values.set("runner:device:id", "runner_device_identifier_01");
+    secretStore.values.set("runner:device:token", "a".repeat(43));
+    secretStore.values.set("runner:device:site", "https://example.convex.site");
+    const evidenceId = "ev_0123456789abcdef";
+    let observedKey = "";
+    const { app } = buildRunner({
+      config: { ...config, generationEnabled: true },
+      secretStore,
+      pairingCode: "123456",
+      now: () => 1_000,
+      claimHarnessRun: async () => ({
+        userId: "user_identifier_0001", registrationId: "registration_1", runId: "run_1",
+        executionRequestId: "harness-execution-0001", leaseExpiresAt: 90_000,
+        snapshot: {
+          ...testSnapshot(),
+          profile: { ...testSnapshot().profile, research: { ...testSnapshot().profile.research, webSearchEnabled: true, allowedDomains: ["openai.com"] } },
+        } as ReturnType<typeof testSnapshot>,
+        recentBodies: [],
+      }),
+      submitHarnessReceipt: async () => undefined,
+      researchAdapter: {
+        research: async ({ apiKey: receivedKey }) => {
+          observedKey = receivedKey;
+          return ({
+          responseId: "resp_research",
+          requestedModel: "gpt-5.6-terra",
+          actualModel: "gpt-5.6-terra",
+          brief: "AI operations benefit from evidence.",
+          evidence: [{ id: evidenceId, url: "https://openai.com/news", title: "OpenAI news", domain: "openai.com", retrievedAt: 1_000, publishedAt: null, contentHash: "a".repeat(64) }],
+          queries: ["AI operations"], toolCalls: 1,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          latencyMs: 20, requestId: "req_research",
+          });
+        },
+      },
+      providerAdapter: {
+        compose: async () => ({
+          responseId: "resp_compose", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+          output: { body: "AI operations benefit from evidence.", assumptions: [], riskFlags: [], sourceMap: [{ claim: "AI operations benefit from evidence.", evidenceIds: [evidenceId] }] },
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 }, latencyMs: 25, requestId: "req_compose",
+        }),
+      },
+    });
+    openApps.push(app);
+    const pair = await app.inject({ method: "POST", url: "/v1/pair", headers: { origin: config.webOrigin, "x-osa-request": "settings" }, payload: { code: "123456" } });
+    const response = await app.inject({
+      method: "POST", url: "/v1/process-harness",
+      headers: { origin: config.webOrigin, "x-osa-request": "execution", cookie: pair.headers["set-cookie"] as string },
+      payload: { requestId: "harness-execution-0001" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(observedKey).toBe(apiKey);
+    expect(response.body).not.toContain(apiKey);
+    expect(response.json()).toMatchObject({
+      research: { toolCalls: 1, evidence: [{ id: evidenceId }] },
+      evaluation: { state: "passed", codes: [], warnings: ["FRESHNESS_UNVERIFIED"] },
+    });
   });
 
   it("stores a runner device token locally without returning it", async () => {
@@ -415,7 +433,7 @@ describe("local runner security boundary", () => {
   });
 });
 
-function testSnapshot() {
+function testSnapshot(): import("@open-social-agent/contracts").ConfigurationSnapshot {
   return {
     schemaVersion: 1,
     profileRevision: 1,

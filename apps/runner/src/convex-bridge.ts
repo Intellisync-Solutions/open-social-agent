@@ -2,6 +2,8 @@ import {
   RunnerClaimRequestSchema,
   RunnerClaimResponseSchema,
   RunnerReceiptRequestSchema,
+  RunnerHarnessClaimResponseSchema,
+  RunnerHarnessReceiptRequestSchema,
   type RunnerClaimResponse,
 } from "@open-social-agent/contracts";
 
@@ -12,6 +14,25 @@ export class RunnerBridgeError extends Error {
   ) {
     super(code);
   }
+}
+
+export async function claimHarnessRun(input: {
+  siteUrl: string; runnerId: string; token: string; requestId: string; fetchImpl?: typeof fetch;
+}) {
+  const response = await boundedFetch(new URL("/runner/harness/claim", validatedSiteUrl(input.siteUrl)), {
+    runnerId: input.runnerId, requestId: input.requestId,
+  }, input.token, input.fetchImpl);
+  if (response.status === 204) return null;
+  if (!response.ok) throw await bridgeError(response, "HARNESS_CLAIM_FAILED");
+  return RunnerHarnessClaimResponseSchema.parse(await boundedResponseJson(response));
+}
+
+export async function submitHarnessReceipt(input: {
+  siteUrl: string; token: string; receipt: unknown; fetchImpl?: typeof fetch;
+}) {
+  const receipt = RunnerHarnessReceiptRequestSchema.parse(input.receipt);
+  const response = await boundedFetch(new URL("/runner/harness/receipts", validatedSiteUrl(input.siteUrl)), receipt, input.token, input.fetchImpl);
+  if (!response.ok) throw await bridgeError(response, "HARNESS_RECEIPT_FAILED");
 }
 
 export async function claimApprovedRun(input: {
