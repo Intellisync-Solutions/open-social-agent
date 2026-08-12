@@ -184,6 +184,9 @@ function SignedIn() {
         <Button variant="outline" onClick={() => void signOut()}>
           Sign out
         </Button>
+        <Button variant="outline" asChild>
+          <Link href="/settings/provider">Provider &amp; runner settings</Link>
+        </Button>
       </div>
     </section>
   );

@@ -36,9 +36,14 @@ the user's control of the public action.
 - Next.js App Router UI with Convex Auth
 - auth-scoped resumable eight-step onboarding
 - shared Zod contracts with no provider-secret field
+- loopback-only runner pairing and OS-keyring provider secret storage
+- installed-browser detection without profile access
+- non-generative provider authentication probe, guarded and verified against
+  OpenAI without making a generation request
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Runner, provider execution, schedules, history, and posting remain incomplete.
+Provider generation, schedules, history, harness execution, and posting remain
+incomplete.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
 implemented/planned boundary.
 

@@ -6,6 +6,8 @@
   "packageManager": "pnpm@10.12.4",
   "scripts": {
     "dev": "turbo run dev --filter=@open-social-agent/web",
+    "dev:runner": "pnpm --filter @open-social-agent/runner dev",
+    "start:runner": "pnpm --filter @open-social-agent/runner start",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck && tsc -p convex/tsconfig.json",

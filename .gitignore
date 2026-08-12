@@ -13,5 +13,5 @@ test-results/
 *.tsbuildinfo
 .DS_Store
 browser-profiles/
-secrets/
+/secrets/
 .pnpm-store/
