@@ -12,6 +12,7 @@ const runnerConfigSchema = z.object({
   dataDirectory: z.string().min(1),
   forceEncryptedStore: z.boolean(),
   fallbackEncryptionKey: z.string().optional(),
+  generationEnabled: z.boolean(),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
@@ -27,5 +28,6 @@ export function loadRunnerConfig(
       environment.OSA_DATA_DIR ?? join(homedir(), ".open-social-agent"),
     forceEncryptedStore: environment.OSA_SECRET_STORE === "encrypted-file",
     fallbackEncryptionKey: environment.LOCAL_SECRET_ENCRYPTION_KEY,
+    generationEnabled: environment.OSA_ENABLE_GENERATION === "1",
   });
 }

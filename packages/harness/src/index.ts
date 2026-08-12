@@ -70,3 +70,18 @@ export function planZeroPostRun(
     externalWrites: 0,
   };
 }
+
+export function validateCompositionInput(
+  snapshot: ConfigurationSnapshot,
+  evidencePacket: string,
+): ZeroPostPlan {
+  const plan = planZeroPostRun(snapshot);
+  if (
+    snapshot.profile.research.citationsRequired &&
+    evidencePacket.trim().length === 0
+  ) {
+    throw new Error("GROUNDING_INSUFFICIENT");
+  }
+  if (evidencePacket.length > 64_000) throw new Error("CONTEXT_BUDGET_EXCEEDED");
+  return plan;
+}

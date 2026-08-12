@@ -7,6 +7,12 @@ import {
 
 const boundedText = (max: number) => z.string().trim().min(1).max(max);
 
+export const modelPresetPolicies = {
+  economy: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+  balanced: { modelId: "gpt-5.6-terra", reasoningEffort: "medium" },
+  quality: { modelId: "gpt-5.6-sol", reasoningEffort: "high" },
+} as const;
+
 export const DestinationPolicySchema = z.object({
   feedUrl: z.string().url(),
   allowedOrigin: z.string().url(),
@@ -92,6 +98,39 @@ export const RunStateSchema = z.enum([
   "cancelled",
 ]);
 
+export const DraftOutputSchema = z.object({
+  body: z.string().trim().min(1).max(8_000),
+  assumptions: z.array(z.string().trim().min(1).max(300)).max(12),
+  riskFlags: z.array(z.string().trim().min(1).max(120)).max(12),
+  sourceMap: z
+    .array(
+      z.object({
+        claim: z.string().trim().min(1).max(500),
+        sourceUrls: z.array(z.string().url()).max(8),
+      }),
+    )
+    .max(30),
+});
+
+export const ProviderExecutionResultSchema = z.object({
+  responseId: z.string().min(1).max(200),
+  requestedModel: z.string().min(1).max(120),
+  actualModel: z.string().min(1).max(120),
+  output: DraftOutputSchema,
+  usage: z.object({
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+  }),
+  latencyMs: z.number().int().nonnegative(),
+  requestId: z.string().max(200).nullable(),
+});
+
+export const RunnerComposeInputSchema = z.object({
+  snapshot: z.lazy(() => ConfigurationSnapshotSchema),
+  evidencePacket: z.string().max(64_000),
+});
+
 export const ConfigurationSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
   profileRevision: z.number().int().positive(),
@@ -105,6 +144,10 @@ export type AutomationProfileInput = z.infer<
 >;
 export type ScheduleInput = z.infer<typeof ScheduleInputSchema>;
 export type RunState = z.infer<typeof RunStateSchema>;
+export type DraftOutput = z.infer<typeof DraftOutputSchema>;
+export type ProviderExecutionResult = z.infer<
+  typeof ProviderExecutionResultSchema
+>;
 export type ConfigurationSnapshot = z.infer<
   typeof ConfigurationSnapshotSchema
 >;

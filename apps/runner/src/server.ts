@@ -4,12 +4,16 @@ import rateLimit from "@fastify/rate-limit";
 import { detectInstalledBrowsers } from "@open-social-agent/browser";
 import {
   ProviderCapabilityProbeSchema,
+  ProviderExecutionResultSchema,
   RunnerPairRequestSchema,
   RunnerProviderKindSchema,
+  RunnerComposeInputSchema,
   RunnerSecretInputSchema,
   type RunnerProviderKind,
 } from "@open-social-agent/contracts";
 import type { SecretStore } from "@open-social-agent/secrets";
+import { validateCompositionInput } from "@open-social-agent/harness";
+import { createOpenAIProvider, type ProviderAdapter } from "@open-social-agent/providers";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import {
   createHash,
@@ -34,14 +38,16 @@ export function buildRunner(options: {
   pairingCode?: string;
   now?: () => number;
   providerProbe?: typeof runProviderProbe;
+  providerAdapter?: ProviderAdapter;
 }) {
   const app = Fastify({
-    bodyLimit: 16_384,
+    bodyLimit: 131_072,
     logger: false,
     requestIdHeader: false,
   });
   const now = options.now ?? Date.now;
   const providerProbe = options.providerProbe ?? runProviderProbe;
+  const providerAdapter = options.providerAdapter ?? createOpenAIProvider();
   const pairingCode =
     options.pairingCode ?? String(randomInt(100_000, 1_000_000));
   const pairingDigest = digest(pairingCode);
@@ -69,7 +75,9 @@ export function buildRunner(options: {
         .send(errorEnvelope(request.id, "ORIGIN_NOT_ALLOWED"));
     }
     if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
-      if (request.headers["x-osa-request"] !== "settings") {
+      const expectedPurpose =
+        request.url === "/v1/compose" ? "execution" : "settings";
+      if (request.headers["x-osa-request"] !== expectedPurpose) {
         return reply
           .code(403)
           .send(errorEnvelope(request.id, "REQUEST_HEADER_REQUIRED"));
@@ -112,6 +120,70 @@ export function buildRunner(options: {
         maxAge: Math.floor(sessionDurationMs / 1000),
       });
       return { status: "paired", expiresAt: now() + sessionDurationMs };
+    },
+  );
+
+  app.post(
+    "/v1/compose",
+    {
+      config: { rateLimit: { max: 2, timeWindow: 60_000 } },
+      preHandler: authorize,
+    },
+    async (request, reply) => {
+      if (request.headers["x-osa-request"] !== "execution") {
+        return reply
+          .code(403)
+          .send(errorEnvelope(request.id, "EXECUTION_HEADER_REQUIRED"));
+      }
+      if (!options.config.generationEnabled) {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "GENERATION_DISABLED"));
+      }
+      const input = RunnerComposeInputSchema.safeParse(request.body);
+      if (!input.success) {
+        return reply
+          .code(400)
+          .send(errorEnvelope(request.id, "COMPOSITION_INPUT_INVALID"));
+      }
+      if (input.data.snapshot.profile.model.provider !== "openai") {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "PROVIDER_CAPABILITY_UNAVAILABLE"));
+      }
+      try {
+        validateCompositionInput(
+          input.data.snapshot,
+          input.data.evidencePacket,
+        );
+      } catch (error) {
+        return reply
+          .code(409)
+          .send(
+            errorEnvelope(
+              request.id,
+              error instanceof Error ? error.message : "COMPOSITION_BLOCKED",
+            ),
+          );
+      }
+      const apiKey = await options.secretStore.get(secretRef("openai"));
+      if (!apiKey) {
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "PROVIDER_SECRET_MISSING"));
+      }
+      try {
+        const result = await providerAdapter.compose({
+          apiKey,
+          snapshot: input.data.snapshot,
+          evidencePacket: input.data.evidencePacket,
+        });
+        return ProviderExecutionResultSchema.parse(result);
+      } catch {
+        return reply
+          .code(502)
+          .send(errorEnvelope(request.id, "PROVIDER_EXECUTION_FAILED"));
+      }
     },
   );
 

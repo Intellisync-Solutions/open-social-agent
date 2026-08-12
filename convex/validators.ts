@@ -96,3 +96,12 @@ export const runState = v.union(
   v.literal("rejected"),
   v.literal("cancelled"),
 );
+
+export const draftOutput = v.object({
+  body: v.string(),
+  assumptions: v.array(v.string()),
+  riskFlags: v.array(v.string()),
+  sourceMap: v.array(
+    v.object({ claim: v.string(), sourceUrls: v.array(v.string()) }),
+  ),
+});

@@ -1,6 +1,10 @@
 import type { ConfigurationSnapshot } from "@open-social-agent/contracts";
 import { describe, expect, it } from "vitest";
-import { assertRunTransition, planZeroPostRun } from "./index";
+import {
+  assertRunTransition,
+  planZeroPostRun,
+  validateCompositionInput,
+} from "./index";
 
 const snapshot: ConfigurationSnapshot = {
   schemaVersion: 1,
@@ -78,5 +82,11 @@ describe("governed harness", () => {
         },
       }),
     ).toThrow("BUDGET_DENIED");
+  });
+
+  it("blocks composition when citations are required without evidence", () => {
+    expect(() => validateCompositionInput(snapshot, "")).toThrow(
+      "GROUNDING_INSUFFICIENT",
+    );
   });
 });

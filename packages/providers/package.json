@@ -1,27 +1,18 @@
 {
-  "name": "@open-social-agent/runner",
+  "name": "@open-social-agent/providers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start": "tsx src/main.ts",
     "build": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "verify:provider": "tsx src/verify-provider.ts"
+    "verify:live": "tsx src/verify-live.ts"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.1.2",
-    "@fastify/cors": "^11.3.0",
-    "@fastify/rate-limit": "^11.2.0",
-    "@open-social-agent/browser": "workspace:*",
     "@open-social-agent/contracts": "workspace:*",
-    "@open-social-agent/harness": "workspace:*",
-    "@open-social-agent/providers": "workspace:*",
-    "@open-social-agent/secrets": "workspace:*",
-    "fastify": "^5.11.3",
     "openai": "7.4.0",
     "zod": "^4.4.3"
   },
