@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { detectInstalledBrowsers } from "./index";
+import {
+  assertAllowedNavigation,
+  detectInstalledBrowsers,
+  directVerificationState,
+  isolatedProfilePath,
+  validateBrowserAction,
+} from "./index";
 
 describe("installed browser detection", () => {
   it("returns only executable allowlisted macOS browsers", async () => {
@@ -21,5 +27,62 @@ describe("installed browser detection", () => {
         canExecute: async () => true,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("browser publication corridor", () => {
+  it("derives an app-owned profile path", () => {
+    expect(isolatedProfilePath("/tmp/osa", "user_12345678", "brave")).toBe(
+      "/tmp/osa/browser-profiles/user_12345678/brave",
+    );
+  });
+
+  it("rejects cross-origin and sibling-path navigation", () => {
+    expect(() =>
+      assertAllowedNavigation(
+        "https://attacker.example/feed/acme",
+        "https://social.example/feed/acme",
+      ),
+    ).toThrow("DOMAIN_NOT_ALLOWED");
+    expect(() =>
+      assertAllowedNavigation(
+        "https://social.example/feed/other",
+        "https://social.example/feed/acme",
+      ),
+    ).toThrow("DOMAIN_NOT_ALLOWED");
+    expect(() =>
+      assertAllowedNavigation(
+        "https://social.example/feed/acme",
+        "https://user:password@social.example/feed/acme",
+      ),
+    ).toThrow("DOMAIN_NOT_ALLOWED");
+  });
+
+  it("rejects typing anything except the approved body", () => {
+    expect(() =>
+      validateBrowserAction(
+        { type: "type", text: "changed text" },
+        { allowedDestinationUrl: "https://social.example/feed/acme", approvedBody: "approved text" },
+      ),
+    ).toThrow("APPROVAL_CONTENT_MISMATCH");
+  });
+
+  it("requires direct detail URL and body evidence for live", () => {
+    expect(
+      directVerificationState({
+        currentUrl: "https://social.example/feed/acme/post/123",
+        destinationUrl: "https://social.example/feed/acme",
+        renderedBody: "approved text",
+        approvedBody: "approved text",
+      }),
+    ).toBe("live");
+    expect(
+      directVerificationState({
+        currentUrl: "https://social.example/feed/acme",
+        destinationUrl: "https://social.example/feed/acme",
+        renderedBody: "approved text",
+        approvedBody: "approved text",
+      }),
+    ).toBe("pending");
   });
 });

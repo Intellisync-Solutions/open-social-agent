@@ -3,11 +3,13 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
   contentPolicy,
+  approvalDecision,
   draftOutput,
   destinationPolicy,
   lifecycleStatus,
   modelPolicy,
   researchPolicy,
+  receiptState,
   runState,
   scheduleCadence,
 } from "./validators";
@@ -106,4 +108,29 @@ export default defineSchema({
     actor: v.union(v.literal("model"), v.literal("user")),
     createdAt: v.number(),
   }).index("by_outputId_and_revision", ["outputId", "revision"]),
+  approvals: defineTable({
+    userId: v.id("users"),
+    runId: v.id("runs"),
+    outputId: v.id("outputs"),
+    revision: v.number(),
+    bodyHash: v.string(),
+    destinationUrl: v.string(),
+    expiresAt: v.number(),
+    decision: approvalDecision,
+    createdAt: v.number(),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_outputId", ["outputId"]),
+  publicationReceipts: defineTable({
+    userId: v.id("users"),
+    runId: v.id("runs"),
+    approvalId: v.id("approvals"),
+    state: receiptState,
+    destinationUrl: v.string(),
+    bodyHash: v.string(),
+    directUrl: v.optional(v.string()),
+    attemptedAt: v.number(),
+    verifiedAt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+  }).index("by_runId", ["runId"]),
 });

@@ -191,6 +191,13 @@ export const purgeMine = mutation({
     ) {
       throw new ConvexError("PURGE_CONFIRMATION_REQUIRED");
     }
+    const approvals = await ctx.db
+      .query("approvals")
+      .withIndex("by_outputId", (q) => q.eq("outputId", output._id))
+      .take(1);
+    if (approvals.length > 0) {
+      throw new ConvexError("OUTPUT_HAS_APPROVAL");
+    }
     const revisions = await ctx.db
       .query("outputRevisions")
       .withIndex("by_outputId_and_revision", (q) =>

@@ -45,12 +45,14 @@ the user's control of the public action.
   harness planner
 - opt-in OpenAI structured composition with local-key containment, immutable
   original outputs, editable revisions, and usage capture
+- exact approval binding plus isolated-profile, domain, action, and direct-detail
+  receipt guards verified on a controlled local browser fixture
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Provider-backed research, automatic cron activation, approval, browser
-execution, and posting remain incomplete. Luna structured composition has a
-guarded local verification; Terra, Sol, search, and computer use remain
-unverified.
+Provider-backed research, automatic cron activation, OpenAI computer-tool
+iteration, real-account browser authorization, and posting remain incomplete.
+Luna structured composition has a guarded local verification; Terra, Sol,
+search, computer use, and real social publication remain unverified.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
 implemented/planned boundary.
 

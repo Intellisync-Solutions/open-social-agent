@@ -81,11 +81,13 @@ would send, post, submit, or represent the user to a third party.
 - Centralized OpenAI preset registry, opt-in local Responses composition,
   immutable original outputs, editable revisions, usage telemetry, and history
   archive/restore/purge
+- Exact revision-and-destination approval records, stale-edit invalidation,
+  isolated-profile/domain/action guards, and internal terminal receipt contracts
 
-Automatic cron activation, provider-backed web research, approvals, computer
-use, and publication receipts remain planned. OpenAI structured composition is
-verified for Luna with search disabled; other preset/tool combinations remain
-unverified until guarded tests run.
+Automatic cron activation, provider-backed web research, OpenAI computer-tool
+iteration, and real-account publication verification remain planned. OpenAI
+structured composition is verified for Luna with search disabled; the approval
+and browser corridor is deterministic and locally dry-run only.
 
 ### Deferred
 

@@ -59,6 +59,14 @@ const saveModelResult = makeFunctionReference<"mutation">(
   "outputs:saveModelResultMine",
 );
 const reviseOutput = makeFunctionReference<"mutation">("outputs:reviseMine");
+const setOutputArchived = makeFunctionReference<"mutation">(
+  "outputs:setArchivedMine",
+);
+const purgeOutput = makeFunctionReference<"mutation">("outputs:purgeMine");
+const decideApproval = makeFunctionReference<"mutation">("approvals:decideMine");
+const recordReceipt = makeFunctionReference<"mutation">(
+  "receipts:recordVerified",
+);
 
 async function authenticatedTest() {
   const t = convexTest(schema, modules);
@@ -214,5 +222,111 @@ describe("auth-scoped automation persistence", () => {
       "User-edited revision.",
     ]);
     expect(state.run?.state).toBe("awaiting_approval");
+  });
+
+  it("rejects stale approval after an output edit", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, { profileId, name: "Daily signal", cadence: "daily", timezone: "America/Toronto", localTime: "09:30" });
+    const runId = await alice.mutation(runNow, { scheduleId, requestId: "manual-request-approval-01" });
+    const outputId = await alice.mutation(saveModelResult, {
+      runId,
+      executionJson: JSON.stringify({ responseId: "resp_test", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra", output: { body: "Original.", assumptions: [], riskFlags: [], sourceMap: [] }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, latencyMs: 10, requestId: "req_test" }),
+    });
+    const original = await t.run(async (ctx) => await ctx.db.query("outputRevisions").withIndex("by_outputId_and_revision", (q) => q.eq("outputId", outputId).eq("revision", 1)).unique());
+    await alice.mutation(reviseOutput, { outputId, body: "Edited." });
+    await expect(alice.mutation(decideApproval, {
+      runId, outputId, revision: 1, bodyHash: original!.bodyHash, destinationUrl: profileInput.destination.feedUrl, expiresAt: Date.now() + 60_000, decision: "approved",
+    })).rejects.toThrow("APPROVAL_STALE");
+  });
+
+  it("records terminal evidence only against the exact approved revision", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Daily signal",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-request-receipt-01",
+    });
+    const outputId = await alice.mutation(saveModelResult, {
+      runId,
+      executionJson: JSON.stringify({
+        responseId: "resp_test",
+        requestedModel: "gpt-5.6-terra",
+        actualModel: "gpt-5.6-terra",
+        output: {
+          body: "Approved body.",
+          assumptions: [],
+          riskFlags: [],
+          sourceMap: [],
+        },
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        latencyMs: 10,
+        requestId: "req_test",
+      }),
+    });
+    const revision = await t.run(async (ctx) =>
+      await ctx.db
+        .query("outputRevisions")
+        .withIndex("by_outputId_and_revision", (q) =>
+          q.eq("outputId", outputId).eq("revision", 1),
+        )
+        .unique(),
+    );
+    const approvalId = await alice.mutation(decideApproval, {
+      runId,
+      outputId,
+      revision: 1,
+      bodyHash: revision!.bodyHash,
+      destinationUrl: profileInput.destination.feedUrl,
+      expiresAt: Date.now() + 60_000,
+      decision: "approved",
+    });
+    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!
+      .userId;
+    await expect(
+      t.mutation(recordReceipt, {
+        userId,
+        runId,
+        approvalId,
+        state: "live",
+        destinationUrl: profileInput.destination.feedUrl,
+        bodyHash: revision!.bodyHash,
+        directUrl: "https://attacker.example/post/receipt-1",
+      }),
+    ).rejects.toThrow("DIRECT_VERIFICATION_REQUIRED");
+    await t.mutation(recordReceipt, {
+      userId,
+      runId,
+      approvalId,
+      state: "live",
+      destinationUrl: profileInput.destination.feedUrl,
+      bodyHash: revision!.bodyHash,
+      directUrl: "https://social.example/feed/acme/post/receipt-1",
+    });
+    const state = await t.run(async (ctx) => ({
+      run: await ctx.db.get("runs", runId),
+      receipt: await ctx.db
+        .query("publicationReceipts")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .unique(),
+    }));
+    expect(state.run?.state).toBe("live");
+    expect(state.receipt?.verifiedAt).toBeTypeOf("number");
+    expect(state.receipt?.directUrl).toContain("/post/receipt-1");
+    await alice.mutation(setOutputArchived, { outputId, archived: true });
+    const output = await t.run(async (ctx) => await ctx.db.get("outputs", outputId));
+    await expect(
+      alice.mutation(purgeOutput, {
+        outputId,
+        confirmHash: output!.originalHash.slice(0, 12),
+      }),
+    ).rejects.toThrow("OUTPUT_HAS_APPROVAL");
   });
 });

@@ -126,6 +126,54 @@ export const ProviderExecutionResultSchema = z.object({
   requestId: z.string().max(200).nullable(),
 });
 
+export const ApprovalDecisionInputSchema = z.object({
+  runId: z.string().min(1),
+  outputId: z.string().min(1),
+  revision: z.number().int().positive(),
+  bodyHash: z.string().regex(/^[a-f0-9]{64}$/),
+  destinationUrl: z.string().url(),
+  expiresAt: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+});
+
+export const BrowserActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("navigate"), url: z.string().url() }),
+  z.object({ type: z.literal("click"), x: z.number().int().nonnegative(), y: z.number().int().nonnegative() }),
+  z.object({ type: z.literal("type"), text: z.string().max(8_000) }),
+  z.object({ type: z.literal("keypress"), keys: z.array(z.string().min(1).max(30)).min(1).max(8) }),
+  z.object({ type: z.literal("wait"), milliseconds: z.number().int().min(0).max(5_000) }),
+]);
+
+export const PublicationReceiptStateSchema = z.enum([
+  "live",
+  "pending",
+  "blocked",
+  "failed",
+]);
+
+export const RunnerPublicationRequestSchema = z.object({
+  approvalId: z.string().min(1).max(200),
+  runId: z.string().min(1).max(200),
+  destinationUrl: z.string().url(),
+  approvedBody: z.string().min(1).max(8_000),
+  bodyHash: z.string().regex(/^[a-f0-9]{64}$/),
+  expiresAt: z.number().int().positive(),
+  browserKind: z.enum(["brave", "chrome", "edge", "chromium"]),
+});
+
+export const RunnerPublicationEvidenceSchema = z.object({
+  approvalId: z.string().min(1).max(200),
+  runId: z.string().min(1).max(200),
+  state: PublicationReceiptStateSchema,
+  destinationUrl: z.string().url(),
+  bodyHash: z.string().regex(/^[a-f0-9]{64}$/),
+  directUrl: z.string().url().nullable(),
+  attemptedAt: z.number().int().nonnegative(),
+  verifiedAt: z.number().int().nonnegative().nullable(),
+  errorCode: z.string().max(120).nullable(),
+  traceId: z.string().min(1).max(200),
+});
+
 export const RunnerComposeInputSchema = z.object({
   snapshot: z.lazy(() => ConfigurationSnapshotSchema),
   evidencePacket: z.string().max(64_000),
