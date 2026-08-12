@@ -38,6 +38,51 @@ export function nextOccurrence(
   return next.getTime();
 }
 
+export function latestDueOccurrence(
+  input: ScheduleInput,
+  earliestDueAt: number,
+  now: number,
+): { scheduledFor: number; nextRunAt: number; skipped: number } {
+  const parsed = ScheduleInputSchema.parse(input);
+  if (
+    !Number.isSafeInteger(earliestDueAt) ||
+    !Number.isSafeInteger(now) ||
+    earliestDueAt > now
+  ) {
+    throw new Error("SCHEDULE_DUE_WINDOW_INVALID");
+  }
+  let cron: Cron;
+  try {
+    cron = new Cron(toCronPattern(parsed), {
+      timezone: parsed.timezone,
+      catch: false,
+    });
+  } catch {
+    throw new Error("SCHEDULE_CRON_INVALID");
+  }
+  const latest = cron.previousRuns(1, new Date(now + 1_000))[0];
+  const scheduledFor =
+    latest && latest.getTime() >= earliestDueAt
+      ? latest.getTime()
+      : earliestDueAt;
+  const nextRunAt = nextOccurrence(parsed, scheduledFor);
+  const skipped = countOccurrencesBetween(cron, earliestDueAt, scheduledFor);
+  return { scheduledFor, nextRunAt, skipped };
+}
+
+function countOccurrencesBetween(
+  cron: Cron,
+  earliestDueAt: number,
+  scheduledFor: number,
+) {
+  if (scheduledFor <= earliestDueAt) return 0;
+  const previous = cron.previousRuns(101, new Date(scheduledFor + 1_000));
+  const count = previous.filter(
+    (item) => item.getTime() >= earliestDueAt,
+  ).length;
+  return Math.max(0, Math.min(100, count - 1));
+}
+
 export function occurrenceKey(
   scheduleId: string,
   scheduledFor: number,

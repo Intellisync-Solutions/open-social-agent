@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { nextOccurrence, occurrenceKey, toCronPattern } from "./index";
+import {
+  latestDueOccurrence,
+  nextOccurrence,
+  occurrenceKey,
+  toCronPattern,
+} from "./index";
 
 const daily = {
   name: "Daily signal",
@@ -20,9 +25,9 @@ describe("deterministic scheduling", () => {
   });
 
   it("builds a weekly five-field cron pattern", () => {
-    expect(
-      toCronPattern({ ...daily, cadence: "weekly", weekday: 2 }),
-    ).toBe("30 9 * * 2");
+    expect(toCronPattern({ ...daily, cadence: "weekly", weekday: 2 })).toBe(
+      "30 9 * * 2",
+    );
   });
 
   it("rejects advanced cron with a seconds field", () => {
@@ -39,5 +44,15 @@ describe("deterministic scheduling", () => {
     expect(occurrenceKey("schedule-1", 1_800_000, 3)).toBe(
       "schedule-1:1800000:3",
     );
+  });
+
+  it("coalesces missed occurrences to the latest due preparation", () => {
+    const earliestDueAt = Date.parse("2026-08-10T13:30:00Z");
+    const now = Date.parse("2026-08-12T15:00:00Z");
+    expect(latestDueOccurrence(daily, earliestDueAt, now)).toEqual({
+      scheduledFor: Date.parse("2026-08-12T13:30:00Z"),
+      nextRunAt: Date.parse("2026-08-13T13:30:00Z"),
+      skipped: 2,
+    });
   });
 });

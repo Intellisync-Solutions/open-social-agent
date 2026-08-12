@@ -5,7 +5,11 @@ import {
   type ConfigurationSnapshot,
   type ScheduleInput,
 } from "@open-social-agent/contracts";
-import { nextOccurrence, occurrenceKey } from "@open-social-agent/scheduling";
+import {
+  latestDueOccurrence,
+  nextOccurrence,
+  occurrenceKey,
+} from "@open-social-agent/scheduling";
 import { ConvexError, v } from "convex/values";
 import {
   internalMutation,
@@ -110,11 +114,7 @@ export const createMine = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
     const profile = await ctx.db.get("automationProfiles", args.profileId);
-    if (
-      !profile ||
-      profile.userId !== userId ||
-      profile.status !== "active"
-    ) {
+    if (!profile || profile.userId !== userId || profile.status !== "active") {
       throw new ConvexError("PROFILE_NOT_ACTIVE");
     }
     const linked = await ctx.db
@@ -180,10 +180,7 @@ export const setStatusMine = mutation({
     }
     let nextRunAt = current.nextRunAt;
     if (args.status === "active") {
-      const profile = await ctx.db.get(
-        "automationProfiles",
-        current.profileId,
-      );
+      const profile = await ctx.db.get("automationProfiles", current.profileId);
       if (
         !profile ||
         profile.userId !== userId ||
@@ -211,10 +208,7 @@ export const purgeMine = mutation({
     if (!current || current.userId !== userId) {
       throw new ConvexError("SCHEDULE_NOT_FOUND");
     }
-    if (
-      current.status !== "archived" ||
-      current.name !== args.confirmName
-    ) {
+    if (current.status !== "archived" || current.name !== args.confirmName) {
       throw new ConvexError("PURGE_CONFIRMATION_REQUIRED");
     }
     const historicalRun = await ctx.db
@@ -243,15 +237,8 @@ export const runNowMine = mutation({
     ) {
       throw new ConvexError("SCHEDULE_NOT_RUNNABLE");
     }
-    const profile = await ctx.db.get(
-      "automationProfiles",
-      current.profileId,
-    );
-    if (
-      !profile ||
-      profile.userId !== userId ||
-      profile.status !== "active"
-    ) {
+    const profile = await ctx.db.get("automationProfiles", current.profileId);
+    if (!profile || profile.userId !== userId || profile.status !== "active") {
       throw new ConvexError("PROFILE_NOT_ACTIVE");
     }
     const key = `manual:${occurrenceKey(String(current._id), 0, current.revision)}:${args.requestId}`;
@@ -278,27 +265,31 @@ export const runNowMine = mutation({
 });
 
 export const enqueueDue = internalMutation({
-  args: { now: v.number(), limit: v.number() },
-  returns: v.object({ created: v.number(), advanced: v.number() }),
+  args: { now: v.optional(v.number()), limit: v.optional(v.number()) },
+  returns: v.object({
+    created: v.number(),
+    advanced: v.number(),
+    skipped: v.number(),
+  }),
   handler: async (ctx, args) => {
-    const limit = Math.max(1, Math.min(Math.trunc(args.limit), 100));
+    const now = args.now ?? Date.now();
+    const limit = Math.max(1, Math.min(Math.trunc(args.limit ?? 50), 100));
     const due = await ctx.db
       .query("schedules")
       .withIndex("by_status_and_nextRunAt", (q) =>
-        q.eq("status", "active").lte("nextRunAt", args.now),
+        q.eq("status", "active").lte("nextRunAt", now),
       )
       .take(limit);
     let created = 0;
     let advanced = 0;
+    let skipped = 0;
     for (const current of due) {
       if (current.nextRunAt === undefined) continue;
-      const profile = await ctx.db.get(
-        "automationProfiles",
-        current.profileId,
-      );
-      const nextRunAt = nextOccurrence(
+      const profile = await ctx.db.get("automationProfiles", current.profileId);
+      const due = latestDueOccurrence(
         scheduleValue(current),
         current.nextRunAt,
+        now,
       );
       if (
         !profile ||
@@ -307,15 +298,15 @@ export const enqueueDue = internalMutation({
       ) {
         await ctx.db.patch(current._id, {
           status: "paused",
-          nextRunAt,
-          updatedAt: args.now,
+          nextRunAt: due.nextRunAt,
+          updatedAt: now,
         });
         advanced += 1;
         continue;
       }
       const key = occurrenceKey(
         String(current._id),
-        current.nextRunAt,
+        due.scheduledFor,
         current.revision,
       );
       const existing = await ctx.db
@@ -327,23 +318,25 @@ export const enqueueDue = internalMutation({
           userId: current.userId,
           scheduleId: current._id,
           occurrenceKey: key,
-          scheduledFor: current.nextRunAt,
+          scheduledFor: due.scheduledFor,
           state: "queued",
           configurationSnapshotJson: JSON.stringify(
             configurationSnapshot(profile, current),
           ),
           traceId: key,
-          createdAt: args.now,
-          updatedAt: args.now,
+          missedOccurrences: due.skipped > 0 ? due.skipped : undefined,
+          createdAt: now,
+          updatedAt: now,
         });
         created += 1;
       }
       await ctx.db.patch(current._id, {
-        nextRunAt,
-        updatedAt: args.now,
+        nextRunAt: due.nextRunAt,
+        updatedAt: now,
       });
       advanced += 1;
+      skipped += due.skipped;
     }
-    return { created, advanced };
+    return { created, advanced, skipped };
   },
 });

@@ -14,6 +14,12 @@ const runnerConfigSchema = z.object({
   fallbackEncryptionKey: z.string().optional(),
   generationEnabled: z.boolean(),
   computerEnabled: z.boolean(),
+  pollingEnabled: z.boolean(),
+  pollingIntervalMs: z
+    .number()
+    .int()
+    .min(15_000)
+    .max(15 * 60_000),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
@@ -31,5 +37,9 @@ export function loadRunnerConfig(
     fallbackEncryptionKey: environment.LOCAL_SECRET_ENCRYPTION_KEY,
     generationEnabled: environment.OSA_ENABLE_GENERATION === "1",
     computerEnabled: environment.OSA_ENABLE_COMPUTER === "1",
+    pollingEnabled: environment.OSA_ENABLE_POLLING === "1",
+    pollingIntervalMs: environment.OSA_POLL_INTERVAL_MS
+      ? Number(environment.OSA_POLL_INTERVAL_MS)
+      : 60_000,
   });
 }

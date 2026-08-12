@@ -41,6 +41,12 @@ type CapabilityResult = {
   checkedAt: number;
   capabilityClaims: Record<string, "unverified">;
 };
+type ExecutionStatus = {
+  generationEnabled: boolean;
+  computerEnabled: boolean;
+  pollingEnabled: boolean;
+  pollingIntervalMs: number;
+};
 
 export default function ProviderSettingsPage() {
   const registrations = useQuery(api.runners.listMine);
@@ -53,6 +59,7 @@ export default function ProviderSettingsPage() {
   const [capabilities, setCapabilities] = useState<CapabilityResult | null>(
     null,
   );
+  const [execution, setExecution] = useState<ExecutionStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [browserKind, setBrowserKind] =
     useState<BrowserSummary["kind"]>("brave");
@@ -165,6 +172,7 @@ export default function ProviderSettingsPage() {
       try {
         const session = await request("/v1/session");
         setBrowsers(session.browsers ?? []);
+        setExecution(session.execution ?? null);
         setRunnerState("paired");
         await refreshSecret(provider);
       } catch {
@@ -190,6 +198,7 @@ export default function ProviderSettingsPage() {
       });
       const session = await request("/v1/session");
       setBrowsers(session.browsers ?? []);
+      setExecution(session.execution ?? null);
       setRunnerState("paired");
       await refreshSecret(provider);
     } catch (error) {
@@ -509,6 +518,30 @@ export default function ProviderSettingsPage() {
                   These explicit actions never start polling. The runner must
                   also have the matching startup gate enabled.
                 </p>
+                {execution ? (
+                  <div className="execution-gates">
+                    <span>
+                      Generation{" "}
+                      <strong>
+                        {execution.generationEnabled ? "enabled" : "disabled"}
+                      </strong>
+                    </span>
+                    <span>
+                      Polling{" "}
+                      <strong>
+                        {execution.pollingEnabled
+                          ? `every ${Math.round(execution.pollingIntervalMs / 1000)}s`
+                          : "disabled"}
+                      </strong>
+                    </span>
+                    <span>
+                      Computer{" "}
+                      <strong>
+                        {execution.computerEnabled ? "enabled" : "disabled"}
+                      </strong>
+                    </span>
+                  </div>
+                ) : null}
                 <Button variant="outline" onClick={() => void processHarness()}>
                   <Zap size={15} /> Process 1 queued draft
                 </Button>

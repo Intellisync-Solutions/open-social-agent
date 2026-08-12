@@ -95,8 +95,9 @@ would send, post, submit, or represent the user to a third party.
   lifecycle, runs, evidence-backed drafts, exact approvals, receipts, trusted
   runner registration, and explicit one-item processing
 
-Automatic cron activation, OpenAI search/computer live-provider verification,
-runner polling, and real-account publication verification remain planned.
+The minute-level due-run cron and opt-in local generation polling are
+implemented. OpenAI search/computer live-provider verification and real-account
+publication verification remain planned.
 OpenAI structured composition is
 verified for Luna with search disabled; the computer loop is deterministic and
 locally dry-run only.

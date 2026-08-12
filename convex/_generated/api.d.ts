@@ -11,6 +11,7 @@
 import type * as approvals from "../approvals.js";
 import type * as auth from "../auth.js";
 import type * as automationProfiles from "../automationProfiles.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as onboarding from "../onboarding.js";
 import type * as outputs from "../outputs.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   approvals: typeof approvals;
   auth: typeof auth;
   automationProfiles: typeof automationProfiles;
+  crons: typeof crons;
   http: typeof http;
   onboarding: typeof onboarding;
   outputs: typeof outputs;
