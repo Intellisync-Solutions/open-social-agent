@@ -8,10 +8,13 @@
  * @module
  */
 
+import type * as approvals from "../approvals.js";
 import type * as auth from "../auth.js";
 import type * as automationProfiles from "../automationProfiles.js";
 import type * as http from "../http.js";
 import type * as onboarding from "../onboarding.js";
+import type * as outputs from "../outputs.js";
+import type * as receipts from "../receipts.js";
 import type * as schedules from "../schedules.js";
 import type * as validators from "../validators.js";
 
@@ -22,10 +25,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  approvals: typeof approvals;
   auth: typeof auth;
   automationProfiles: typeof automationProfiles;
   http: typeof http;
   onboarding: typeof onboarding;
+  outputs: typeof outputs;
+  receipts: typeof receipts;
   schedules: typeof schedules;
   validators: typeof validators;
 }>;

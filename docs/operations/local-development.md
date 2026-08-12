@@ -1,7 +1,6 @@
 # Local Development
 
-Status: current for scaffold and local-runner slices. Harness and browser-profile
-authorization commands will be added only when those capabilities exist.
+Status: current through the approval and deterministic browser-corridor slice.
 
 ## Install and validate
 
@@ -73,6 +72,24 @@ RUN_LIVE_GENERATION_TEST=1 pnpm --filter @open-social-agent/providers verify:liv
 This sends no search tool, opens no browser, uses no social destination, and
 performs no external write. It reports model IDs, token counts, and output size,
 never the generated body or key.
+
+## Controlled browser dry run
+
+The browser package has an opt-in proof that launches a fresh, app-owned
+Playwright profile against a loopback-only social fixture. It fills the exact
+approved body, clicks the fixture's publish control, reopens the synthetic post
+detail page, and reports its verification state. It never uses a user browser
+profile, authenticated social session, or external destination.
+
+```bash
+RUN_BROWSER_DRY_RUN=1 \
+OSA_TEST_BROWSER_EXECUTABLE='/absolute/path/to/a/Playwright-compatible/browser' \
+pnpm --filter @open-social-agent/browser verify:dry-run
+```
+
+The executable path is intentionally required rather than guessed for this
+test. A passing `externalWrite: false` result is controlled development
+evidence only; it is not social publication or production proof.
 
 Do not put provider keys in environment examples, command history, logs, issue
 reports, screenshots, or Convex.

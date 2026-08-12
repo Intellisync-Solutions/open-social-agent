@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Controlled social test</title></head>
+  <body>
+    <main>
+      <h1>Controlled composer</h1>
+      <textarea id="composer" aria-label="Post body"></textarea>
+      <button id="submit" type="button">Publish locally</button>
+    </main>
+    <script>
+      document.querySelector("#submit").addEventListener("click", () => {
+        const body = document.querySelector("#composer").value;
+        const id = "local-proof-1";
+        history.pushState({}, "", `/feed/acme/post/${id}`);
+        document.querySelector("main").innerHTML = `<article data-post-id="${id}"><h1>Local detail</h1><p></p></article>`;
+        document.querySelector("article p").textContent = body;
+      });
+    </script>
+  </body>
+</html>

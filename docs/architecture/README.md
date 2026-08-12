@@ -35,6 +35,12 @@ execution, history, approval, or receipt layers as shipped.
   returns only validated output and bounded usage/latency metadata
 - `convex`: immutable model originals, user revisions, usage fields, archive,
   restore, and exact-confirmation output purge
+- `convex`: one-time approval decisions binding current revision hash, exact
+  destination, expiry, and run; stale edits fail closed
+- `packages/browser`: isolated app-profile paths, HTTPS destination/path guards,
+  exact approved-body typing, and direct-detail verification states
+- `convex`: publication receipts are internal-only terminal evidence; clients
+  cannot manufacture `live`
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -73,7 +79,8 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 ## Next gate
 
 The next slice is runner claiming plus bounded provider-backed research,
-evaluation, approval, and the computer-use corridor. Automatic cron activation
-remains disabled until that end-to-end run path exists. Luna structured output
-is locally verified; Terra, Sol, search, alternate providers, and computer use
+evaluation, and OpenAI computer-tool iteration over the implemented browser
+corridor. Automatic cron remains disabled until that end-to-end path exists.
+Luna structured output and the local controlled browser corridor are verified;
+Terra, Sol, search, alternate providers, computer use, and real social accounts
 remain unverified.

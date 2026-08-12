@@ -105,3 +105,15 @@ export const draftOutput = v.object({
     v.object({ claim: v.string(), sourceUrls: v.array(v.string()) }),
   ),
 });
+
+export const approvalDecision = v.union(
+  v.literal("approved"),
+  v.literal("rejected"),
+);
+
+export const receiptState = v.union(
+  v.literal("live"),
+  v.literal("pending"),
+  v.literal("blocked"),
+  v.literal("failed"),
+);

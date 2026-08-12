@@ -32,6 +32,8 @@ function validateProfile(args: unknown) {
   const feed = new URL(parsed.data.destination.feedUrl);
   if (
     feed.protocol !== "https:" ||
+    feed.username !== "" ||
+    feed.password !== "" ||
     feed.origin !== parsed.data.destination.allowedOrigin
   ) {
     throw new ConvexError("DESTINATION_INVALID");
