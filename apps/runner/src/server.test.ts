@@ -24,6 +24,8 @@ const config: RunnerConfig = {
   forceEncryptedStore: false,
   generationEnabled: false,
   computerEnabled: false,
+  pollingEnabled: false,
+  pollingIntervalMs: 60_000,
 };
 
 const openApps: Array<ReturnType<typeof buildRunner>["app"]> = [];
@@ -201,7 +203,10 @@ describe("local runner security boundary", () => {
 
   it("keeps generation disabled unless the operator opts in", async () => {
     const secretStore = new MemorySecretStore();
-    secretStore.values.set("provider:openai:default", "synthetic-openai-key-for-runner-test");
+    secretStore.values.set(
+      "provider:openai:default",
+      "synthetic-openai-key-for-runner-test",
+    );
     const { app } = buildRunner({ config, secretStore, pairingCode: "123456" });
     openApps.push(app);
     const pair = await app.inject({
@@ -221,7 +226,9 @@ describe("local runner security boundary", () => {
       payload: { requestId: "harness-execution-0001" },
     });
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error: { code: "GENERATION_DISABLED" } });
+    expect(response.json()).toMatchObject({
+      error: { code: "GENERATION_DISABLED" },
+    });
   });
 
   it("runs the research, composition, and deterministic evaluation corridor", async () => {
@@ -239,11 +246,21 @@ describe("local runner security boundary", () => {
       pairingCode: "123456",
       now: () => 1_000,
       claimHarnessRun: async () => ({
-        userId: "user_identifier_0001", registrationId: "registration_1", runId: "run_1",
-        executionRequestId: "harness-execution-0001", leaseExpiresAt: 90_000,
+        userId: "user_identifier_0001",
+        registrationId: "registration_1",
+        runId: "run_1",
+        executionRequestId: "harness-execution-0001",
+        leaseExpiresAt: 90_000,
         snapshot: {
           ...testSnapshot(),
-          profile: { ...testSnapshot().profile, research: { ...testSnapshot().profile.research, webSearchEnabled: true, allowedDomains: ["openai.com"] } },
+          profile: {
+            ...testSnapshot().profile,
+            research: {
+              ...testSnapshot().profile.research,
+              webSearchEnabled: true,
+              allowedDomains: ["openai.com"],
+            },
+          },
         } as ReturnType<typeof testSnapshot>,
         recentBodies: [],
       }),
@@ -251,31 +268,67 @@ describe("local runner security boundary", () => {
       researchAdapter: {
         research: async ({ apiKey: receivedKey }) => {
           observedKey = receivedKey;
-          return ({
-          responseId: "resp_research",
-          requestedModel: "gpt-5.6-terra",
-          actualModel: "gpt-5.6-terra",
-          brief: "AI operations benefit from evidence.",
-          evidence: [{ id: evidenceId, url: "https://openai.com/news", title: "OpenAI news", domain: "openai.com", retrievedAt: 1_000, publishedAt: null, contentHash: "a".repeat(64) }],
-          queries: ["AI operations"], toolCalls: 1,
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          latencyMs: 20, requestId: "req_research",
-          });
+          return {
+            responseId: "resp_research",
+            requestedModel: "gpt-5.6-terra",
+            actualModel: "gpt-5.6-terra",
+            brief: "AI operations benefit from evidence.",
+            evidence: [
+              {
+                id: evidenceId,
+                url: "https://openai.com/news",
+                title: "OpenAI news",
+                domain: "openai.com",
+                retrievedAt: 1_000,
+                publishedAt: null,
+                contentHash: "a".repeat(64),
+              },
+            ],
+            queries: ["AI operations"],
+            toolCalls: 1,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            latencyMs: 20,
+            requestId: "req_research",
+          };
         },
       },
       providerAdapter: {
         compose: async () => ({
-          responseId: "resp_compose", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
-          output: { body: "AI operations benefit from evidence.", assumptions: [], riskFlags: [], sourceMap: [{ claim: "AI operations benefit from evidence.", evidenceIds: [evidenceId] }] },
-          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 }, latencyMs: 25, requestId: "req_compose",
+          responseId: "resp_compose",
+          requestedModel: "gpt-5.6-terra",
+          actualModel: "gpt-5.6-terra",
+          output: {
+            body: "AI operations benefit from evidence.",
+            assumptions: [],
+            riskFlags: [],
+            sourceMap: [
+              {
+                claim: "AI operations benefit from evidence.",
+                evidenceIds: [evidenceId],
+              },
+            ],
+          },
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+          latencyMs: 25,
+          requestId: "req_compose",
         }),
       },
     });
     openApps.push(app);
-    const pair = await app.inject({ method: "POST", url: "/v1/pair", headers: { origin: config.webOrigin, "x-osa-request": "settings" }, payload: { code: "123456" } });
+    const pair = await app.inject({
+      method: "POST",
+      url: "/v1/pair",
+      headers: { origin: config.webOrigin, "x-osa-request": "settings" },
+      payload: { code: "123456" },
+    });
     const response = await app.inject({
-      method: "POST", url: "/v1/process-harness",
-      headers: { origin: config.webOrigin, "x-osa-request": "execution", cookie: pair.headers["set-cookie"] as string },
+      method: "POST",
+      url: "/v1/process-harness",
+      headers: {
+        origin: config.webOrigin,
+        "x-osa-request": "execution",
+        cookie: pair.headers["set-cookie"] as string,
+      },
       payload: { requestId: "harness-execution-0001" },
     });
     expect(response.statusCode).toBe(200);
@@ -283,8 +336,75 @@ describe("local runner security boundary", () => {
     expect(response.body).not.toContain(apiKey);
     expect(response.json()).toMatchObject({
       research: { toolCalls: 1, evidence: [{ id: evidenceId }] },
-      evaluation: { state: "passed", codes: [], warnings: ["FRESHNESS_UNVERIFIED"] },
+      evaluation: {
+        state: "passed",
+        codes: [],
+        warnings: ["FRESHNESS_UNVERIFIED"],
+      },
     });
+  });
+
+  it("processes one queued harness without a paired browser session", async () => {
+    const secretStore = new MemorySecretStore();
+    const apiKey = "synthetic-openai-key-for-scheduler-test";
+    secretStore.values.set("provider:openai:default", apiKey);
+    secretStore.values.set("runner:device:id", "runner_device_identifier_01");
+    secretStore.values.set("runner:device:token", "a".repeat(43));
+    secretStore.values.set("runner:device:site", "https://example.convex.site");
+    const receipts: unknown[] = [];
+    const { app, processNextHarness } = buildRunner({
+      config: { ...config, generationEnabled: true, pollingEnabled: true },
+      secretStore,
+      pairingCode: "123456",
+      now: () => 1_000,
+      claimHarnessRun: async () => ({
+        userId: "user_identifier_0001",
+        registrationId: "registration_1",
+        runId: "run_1",
+        executionRequestId: "poll-request-scheduler-01",
+        leaseExpiresAt: 90_000,
+        snapshot: {
+          ...testSnapshot(),
+          profile: {
+            ...testSnapshot().profile,
+            research: {
+              ...testSnapshot().profile.research,
+              citationsRequired: false,
+            },
+          },
+        },
+        recentBodies: [],
+      }),
+      submitHarnessReceipt: async ({ receipt }) => {
+        receipts.push(receipt);
+      },
+      providerAdapter: {
+        compose: async ({ apiKey: observed }) => {
+          expect(observed).toBe(apiKey);
+          return {
+            responseId: "resp_poll",
+            requestedModel: "gpt-5.6-terra",
+            actualModel: "gpt-5.6-terra",
+            output: {
+              body: "AI scheduled evidence.",
+              assumptions: [],
+              riskFlags: [],
+              sourceMap: [],
+            },
+            usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
+            latencyMs: 9,
+            requestId: "req_poll",
+          };
+        },
+      },
+    });
+    openApps.push(app);
+    await expect(
+      processNextHarness("poll-request-scheduler-01"),
+    ).resolves.toMatchObject({ state: "completed" });
+    expect(receipts).toEqual([
+      expect.objectContaining({ state: "completed", runId: "run_1" }),
+    ]);
   });
 
   it("stores a runner device token locally without returning it", async () => {
@@ -355,7 +475,10 @@ describe("local runner security boundary", () => {
 
   it("records a bounded failure after an approved claim cannot execute", async () => {
     const secretStore = new MemorySecretStore();
-    secretStore.values.set("provider:openai:default", "synthetic-openai-key-for-runner-test");
+    secretStore.values.set(
+      "provider:openai:default",
+      "synthetic-openai-key-for-runner-test",
+    );
     secretStore.values.set("runner:device:id", "runner_device_identifier_01");
     secretStore.values.set("runner:device:token", "a".repeat(43));
     secretStore.values.set("runner:device:site", "https://example.convex.site");
@@ -385,19 +508,22 @@ describe("local runner security boundary", () => {
         receipts.push(receipt);
         return { receiptId: "receipt_1" };
       },
-      detectInstalledBrowsers: async () => [{
-        kind: "brave",
-        label: "Brave Browser",
-        executablePath: "/synthetic/brave",
-      }],
-      withApprovedComputerEnvironment: async (_options, task) => await task({
-        execute: async () => undefined,
-        screenshot: async () => ({
-          imageDataUrl: "data:image/png;base64,AA==",
-          currentUrl: claim.destinationUrl,
+      detectInstalledBrowsers: async () => [
+        {
+          kind: "brave",
+          label: "Brave Browser",
+          executablePath: "/synthetic/brave",
+        },
+      ],
+      withApprovedComputerEnvironment: async (_options, task) =>
+        await task({
+          execute: async () => undefined,
+          screenshot: async () => ({
+            imageDataUrl: "data:image/png;base64,AA==",
+            currentUrl: claim.destinationUrl,
+          }),
+          renderedText: async () => "",
         }),
-        renderedText: async () => "",
-      }),
       processComputerLoop: async () => {
         throw new Error("synthetic provider failure");
       },
@@ -440,11 +566,41 @@ function testSnapshot(): import("@open-social-agent/contracts").ConfigurationSna
     scheduleRevision: 1,
     profile: {
       name: "Signal",
-      destination: { feedUrl: "https://social.example/feed", allowedOrigin: "https://social.example" },
-      content: { topics: ["AI"], persona: "Operator", tone: "Clear", style: "Concise", structure: "Claim and evidence", customInstructions: "", exclusions: [] },
-      research: { webSearchEnabled: false, allowedDomains: [], citationsRequired: true, freshnessDays: 7, maxSources: 8 },
-      model: { provider: "openai", preset: "balanced", modelId: "gpt-5.6-terra", reasoningEffort: "medium", maxOutputTokens: 1200, perRunTokenGate: 12000, dailyTokenGate: 50000 },
+      destination: {
+        feedUrl: "https://social.example/feed",
+        allowedOrigin: "https://social.example",
+      },
+      content: {
+        topics: ["AI"],
+        persona: "Operator",
+        tone: "Clear",
+        style: "Concise",
+        structure: "Claim and evidence",
+        customInstructions: "",
+        exclusions: [],
+      },
+      research: {
+        webSearchEnabled: false,
+        allowedDomains: [],
+        citationsRequired: true,
+        freshnessDays: 7,
+        maxSources: 8,
+      },
+      model: {
+        provider: "openai",
+        preset: "balanced",
+        modelId: "gpt-5.6-terra",
+        reasoningEffort: "medium",
+        maxOutputTokens: 1200,
+        perRunTokenGate: 12000,
+        dailyTokenGate: 50000,
+      },
     },
-    schedule: { name: "Daily", cadence: "daily", timezone: "America/Toronto", localTime: "09:30" },
+    schedule: {
+      name: "Daily",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    },
   };
 }

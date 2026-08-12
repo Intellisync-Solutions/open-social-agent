@@ -138,7 +138,20 @@ restricted to configured domains, and stored with bounded evidence metadata.
 Unknown citations, known-stale evidence, exclusions, token-gate overruns, and
 likely duplicates block the run before approval. Unavailable publication dates
 remain a visible freshness warning. This endpoint is also disabled unless
-`OSA_ENABLE_GENERATION=1`; no background polling is active.
+`OSA_ENABLE_GENERATION=1`.
+
+To process queued preparation runs in the local runner without an open web
+session, explicitly enable bounded polling:
+
+```bash
+OSA_ENABLE_GENERATION=1 OSA_ENABLE_POLLING=1 pnpm start:runner
+```
+
+The default interval is 60 seconds and the minimum is 15 seconds. Each tick
+claims at most one queued generation run and overlapping ticks are suppressed.
+It never claims or executes approved publication work. Convex reconciles due
+schedules once per minute and, after downtime, queues only the latest due
+preparation while recording how many stale occurrences were skipped.
 
 Do not put provider keys in environment examples, command history, logs, issue
 reports, screenshots, or Convex.

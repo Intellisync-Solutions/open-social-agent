@@ -63,6 +63,10 @@ shipped.
   one-item processing controls
 - `convex`: bounded auth-scoped workbench queries compose only owned durable
   records; tenant-isolation tests cover runs, drafts, and dashboard summaries
+- `convex`: minute-level internal due-run reconciliation that coalesces stale
+  backlog into one latest preparation and records the skipped occurrence count
+- `apps/runner`: disabled-by-default, bounded local polling that claims at most
+  one queued generation run per interval and never polls approved publication
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -71,9 +75,7 @@ but no provider secret field or transport.
 ## Planned seams
 
 - `apps/web`: dedicated destination records and finer-grained audit-retention UI
-- `apps/runner`: governed due-run polling and missed-run processing
 - `packages/providers`: full Responses-compatible generation capabilities
-- `packages/scheduling`: missed-run policy beyond implemented recurrence
 - `packages/ui`: accessible shared interface components
 - `convex`: authenticated durable data, scheduling, runs, receipts, audit
 
@@ -96,9 +98,8 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is governed due-run scheduling and runner polling with explicit
-missed-run behavior. Automatic cron remains disabled until that end-to-end path
-is implemented and verified.
+The next slice is the final V1 requirement, security, accessibility, and release
+audit. Cron and polling code are locally validated but not deployed.
 Luna structured output, synthetic-provider research, and the synthetic-provider
 computer loop over a controlled browser are locally verified; Terra, Sol,
 live search, alternate providers, live-provider computer use, and real social

@@ -1824,6 +1824,24 @@ dd {
 .guarded-actions {
   background: hsl(var(--orange) / 0.06);
 }
+.execution-gates {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid hsl(var(--ink) / 0.2);
+}
+.execution-gates span {
+  padding: 0.55rem;
+  border-right: 1px solid hsl(var(--ink) / 0.16);
+  font-size: 0.62rem;
+}
+.execution-gates span:last-child {
+  border-right: 0;
+}
+.execution-gates strong {
+  display: block;
+  margin-top: 0.2rem;
+  text-transform: uppercase;
+}
 .consequential-action {
   color: hsl(var(--paper));
   background: hsl(var(--destructive));

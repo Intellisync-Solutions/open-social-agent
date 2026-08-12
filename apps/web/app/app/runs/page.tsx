@@ -41,7 +41,12 @@ export default function RunsPage() {
               </time>
               <div>
                 <strong>{run.scheduleName}</strong>
-                <small>{run.profileName}</small>
+                <small>
+                  {run.profileName}
+                  {run.missedOccurrences
+                    ? ` · ${run.missedOccurrences} stale occurrence${run.missedOccurrences === 1 ? "" : "s"} skipped`
+                    : ""}
+                </small>
               </div>
               <StateStamp state={run.state} />
               <div className="ledger-proof">

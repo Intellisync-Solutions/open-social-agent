@@ -20,7 +20,11 @@ import {
   type RunnerClaimResponse,
 } from "@open-social-agent/contracts";
 import type { SecretStore } from "@open-social-agent/secrets";
-import { buildEvidencePacket, evaluateHarnessExecution, planZeroPostRun } from "@open-social-agent/harness";
+import {
+  buildEvidencePacket,
+  evaluateHarnessExecution,
+  planZeroPostRun,
+} from "@open-social-agent/harness";
 import {
   createOpenAIProvider,
   createOpenAIResearchProvider,
@@ -41,7 +45,12 @@ import {
   runProviderProbe,
   validateProviderBaseUrl,
 } from "./provider-probe";
-import { claimApprovedRun, claimHarnessRun, submitHarnessReceipt, submitPublicationReceipt } from "./convex-bridge";
+import {
+  claimApprovedRun,
+  claimHarnessRun,
+  submitHarnessReceipt,
+  submitPublicationReceipt,
+} from "./convex-bridge";
 
 const sessionCookie = "osa_runner_session";
 const sessionDurationMs = 8 * 60 * 60 * 1000;
@@ -71,12 +80,17 @@ export function buildRunner(options: {
   const now = options.now ?? Date.now;
   const providerProbe = options.providerProbe ?? runProviderProbe;
   const providerAdapter = options.providerAdapter ?? createOpenAIProvider();
-  const researchAdapter = options.researchAdapter ?? createOpenAIResearchProvider();
-  const processComputerLoop = options.processComputerLoop ?? runOpenAIComputerLoop;
+  const researchAdapter =
+    options.researchAdapter ?? createOpenAIResearchProvider();
+  const processComputerLoop =
+    options.processComputerLoop ?? runOpenAIComputerLoop;
   const claimRun = options.claimApprovedRun ?? claimApprovedRun;
-  const submitReceipt = options.submitPublicationReceipt ?? submitPublicationReceipt;
-  const detectBrowsers = options.detectInstalledBrowsers ?? detectInstalledBrowsers;
-  const withComputerEnvironment = options.withApprovedComputerEnvironment ?? withApprovedComputerEnvironment;
+  const submitReceipt =
+    options.submitPublicationReceipt ?? submitPublicationReceipt;
+  const detectBrowsers =
+    options.detectInstalledBrowsers ?? detectInstalledBrowsers;
+  const withComputerEnvironment =
+    options.withApprovedComputerEnvironment ?? withApprovedComputerEnvironment;
   const claimHarness = options.claimHarnessRun ?? claimHarnessRun;
   const submitHarness = options.submitHarnessReceipt ?? submitHarnessReceipt;
   const pairingCode =
@@ -107,7 +121,8 @@ export function buildRunner(options: {
     }
     if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
       const expectedPurpose =
-        request.url === "/v1/process-harness" || request.url === "/v1/process-approved"
+        request.url === "/v1/process-harness" ||
+        request.url === "/v1/process-approved"
           ? "execution"
           : "settings";
       if (request.headers["x-osa-request"] !== expectedPurpose) {
@@ -282,8 +297,7 @@ export function buildRunner(options: {
               })
             : "blocked";
         const directUrl = verification === "live" ? result.finalUrl : null;
-        const state =
-          result.state === "completed" ? verification : "blocked";
+        const state = result.state === "completed" ? verification : "blocked";
         receiptAttempted = true;
         await submitReceipt({
           siteUrl,
@@ -361,65 +375,38 @@ export function buildRunner(options: {
       preHandler: authorize,
     },
     async (request, reply) => {
-      if (!options.config.generationEnabled) {
-        return reply.code(409).send(errorEnvelope(request.id, "GENERATION_DISABLED"));
-      }
       const input = RunnerHarnessProcessRequestSchema.safeParse(request.body);
       if (!input.success) {
-        return reply.code(400).send(errorEnvelope(request.id, "HARNESS_INPUT_INVALID"));
+        return reply
+          .code(400)
+          .send(errorEnvelope(request.id, "HARNESS_INPUT_INVALID"));
       }
-      const [runnerId, token, siteUrl, apiKey] = await Promise.all([
-        options.secretStore.get("runner:device:id"), options.secretStore.get("runner:device:token"),
-        options.secretStore.get("runner:device:site"), options.secretStore.get(secretRef("openai")),
-      ]);
-      if (!runnerId || !token || !siteUrl) return reply.code(409).send(errorEnvelope(request.id, "RUNNER_DEVICE_MISSING"));
-      if (!apiKey) return reply.code(409).send(errorEnvelope(request.id, "PROVIDER_SECRET_MISSING"));
-      let claim: Awaited<ReturnType<typeof claimHarnessRun>> = null;
-      try {
-        claim = await claimHarness({ siteUrl, runnerId, token, requestId: input.data.requestId });
-        if (!claim) return reply.code(204).send();
-        if (claim.leaseExpiresAt <= now()) throw new Error("HARNESS_LEASE_EXPIRED");
-        planZeroPostRun(claim.snapshot);
-        if (claim.snapshot.profile.model.provider !== "openai") throw new Error("PROVIDER_CAPABILITY_UNAVAILABLE");
-        const research = claim.snapshot.profile.research.webSearchEnabled
-          ? await researchAdapter.research({ apiKey, snapshot: claim.snapshot })
-          : null;
-        if (claim.snapshot.profile.research.citationsRequired && !research?.evidence.length) throw new Error("GROUNDING_INSUFFICIENT");
-        const evidencePacket = research
-          ? buildEvidencePacket({ brief: research.brief, evidence: research.evidence })
-          : "";
-        const composition = await providerAdapter.compose({
-          apiKey,
-          snapshot: claim.snapshot,
-          evidencePacket,
-        });
-        const evaluation = evaluateHarnessExecution({
-          snapshot: claim.snapshot,
-          research,
-          composition,
-          recentBodies: claim.recentBodies,
-        });
-        const result = HarnessExecutionResultSchema.parse({ research, composition, evaluation });
-        await submitHarness({ siteUrl, token, receipt: {
-          state: "completed", runnerId, runId: claim.runId,
-          executionRequestId: claim.executionRequestId, result,
-        } });
-        return result;
-      } catch {
-        if (claim && claim.leaseExpiresAt > now()) {
-          try { await submitHarness({ siteUrl, token, receipt: {
-            state: "failed", runnerId, runId: claim.runId,
-            executionRequestId: claim.executionRequestId,
-            errorCode: "HARNESS_EXECUTION_FAILED",
-          } }); } catch { /* The lease remains recoverable evidence. */ }
-        }
-        return reply.code(502).send(errorEnvelope(request.id, "HARNESS_EXECUTION_FAILED"));
-      }
+      const processed = await processNextHarness(input.data.requestId);
+      if (processed.state === "disabled")
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "GENERATION_DISABLED"));
+      if (processed.state === "not_ready")
+        return reply
+          .code(409)
+          .send(errorEnvelope(request.id, "RUNNER_NOT_READY"));
+      if (processed.state === "empty") return reply.code(204).send();
+      if (processed.state === "failed")
+        return reply
+          .code(502)
+          .send(errorEnvelope(request.id, "HARNESS_EXECUTION_FAILED"));
+      return processed.result;
     },
   );
 
   app.get("/v1/session", { preHandler: authorize }, async () => ({
     status: "paired",
+    execution: {
+      generationEnabled: options.config.generationEnabled,
+      computerEnabled: options.config.computerEnabled,
+      pollingEnabled: options.config.pollingEnabled,
+      pollingIntervalMs: options.config.pollingIntervalMs,
+    },
     browsers: (await detectBrowsers()).map(({ kind, label }) => ({
       kind,
       label,
@@ -567,7 +554,90 @@ export function buildRunner(options: {
     }
   }
 
-  return { app, pairingCode };
+  async function processNextHarness(requestId: string) {
+    if (!options.config.generationEnabled)
+      return { state: "disabled" as const };
+    const [runnerId, token, siteUrl, apiKey] = await Promise.all([
+      options.secretStore.get("runner:device:id"),
+      options.secretStore.get("runner:device:token"),
+      options.secretStore.get("runner:device:site"),
+      options.secretStore.get(secretRef("openai")),
+    ]);
+    if (!runnerId || !token || !siteUrl || !apiKey)
+      return { state: "not_ready" as const };
+    let claim: Awaited<ReturnType<typeof claimHarnessRun>> = null;
+    try {
+      claim = await claimHarness({ siteUrl, runnerId, token, requestId });
+      if (!claim) return { state: "empty" as const };
+      if (claim.leaseExpiresAt <= now())
+        throw new Error("HARNESS_LEASE_EXPIRED");
+      planZeroPostRun(claim.snapshot);
+      if (claim.snapshot.profile.model.provider !== "openai")
+        throw new Error("PROVIDER_CAPABILITY_UNAVAILABLE");
+      const research = claim.snapshot.profile.research.webSearchEnabled
+        ? await researchAdapter.research({ apiKey, snapshot: claim.snapshot })
+        : null;
+      if (
+        claim.snapshot.profile.research.citationsRequired &&
+        !research?.evidence.length
+      )
+        throw new Error("GROUNDING_INSUFFICIENT");
+      const composition = await providerAdapter.compose({
+        apiKey,
+        snapshot: claim.snapshot,
+        evidencePacket: research
+          ? buildEvidencePacket({
+              brief: research.brief,
+              evidence: research.evidence,
+            })
+          : "",
+      });
+      const evaluation = evaluateHarnessExecution({
+        snapshot: claim.snapshot,
+        research,
+        composition,
+        recentBodies: claim.recentBodies,
+      });
+      const result = HarnessExecutionResultSchema.parse({
+        research,
+        composition,
+        evaluation,
+      });
+      await submitHarness({
+        siteUrl,
+        token,
+        receipt: {
+          state: "completed",
+          runnerId,
+          runId: claim.runId,
+          executionRequestId: claim.executionRequestId,
+          result,
+        },
+      });
+      return { state: "completed" as const, result };
+    } catch {
+      if (claim && claim.leaseExpiresAt > now()) {
+        try {
+          await submitHarness({
+            siteUrl,
+            token,
+            receipt: {
+              state: "failed",
+              runnerId,
+              runId: claim.runId,
+              executionRequestId: claim.executionRequestId,
+              errorCode: "HARNESS_EXECUTION_FAILED",
+            },
+          });
+        } catch {
+          /* The lease remains recoverable evidence. */
+        }
+      }
+      return { state: "failed" as const };
+    }
+  }
+
+  return { app, pairingCode, processNextHarness };
 }
 
 function digest(value: string): Buffer {

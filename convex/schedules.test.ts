@@ -51,8 +51,8 @@ const createSchedule = makeFunctionReference<"mutation">(
 const runNow = makeFunctionReference<"mutation">("schedules:runNowMine");
 const enqueueDue = makeFunctionReference<
   "mutation",
-  { now: number; limit: number },
-  { created: number; advanced: number }
+  { now?: number; limit?: number },
+  { created: number; advanced: number; skipped: number }
 >("schedules:enqueueDue");
 const listProfiles = makeFunctionReference<"query">(
   "automationProfiles:listMine",
@@ -231,10 +231,10 @@ describe("auth-scoped automation persistence", () => {
       await ctx.db.patch(scheduleId, { status: "active", nextRunAt: dueAt });
     });
     expect(await t.mutation(enqueueDue, { now: dueAt + 1, limit: 10 })).toEqual(
-      { created: 1, advanced: 1 },
+      { created: 1, advanced: 1, skipped: 0 },
     );
     expect(await t.mutation(enqueueDue, { now: dueAt + 1, limit: 10 })).toEqual(
-      { created: 0, advanced: 0 },
+      { created: 0, advanced: 0, skipped: 0 },
     );
     const runs = await t.run(
       async (ctx) =>
@@ -245,6 +245,40 @@ describe("auth-scoped automation persistence", () => {
     );
     expect(runs).toHaveLength(1);
     expect(runs[0]?.scheduledFor).toBe(dueAt);
+  });
+
+  it("coalesces downtime into one latest due run instead of replaying backlog", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Daily signal",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const earliestDueAt = Date.parse("2026-08-10T13:30:00Z");
+    const now = Date.parse("2026-08-12T15:00:00Z");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(scheduleId, {
+        status: "active",
+        nextRunAt: earliestDueAt,
+      });
+    });
+    expect(await t.mutation(enqueueDue, { now, limit: 10 })).toEqual({
+      created: 1,
+      advanced: 1,
+      skipped: 2,
+    });
+    const runs = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("runs")
+          .withIndex("by_scheduleId", (q) => q.eq("scheduleId", scheduleId))
+          .take(10),
+    );
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.scheduledFor).toBe(Date.parse("2026-08-12T13:30:00Z"));
   });
 
   it("preserves original model output while user edits create revisions", async () => {

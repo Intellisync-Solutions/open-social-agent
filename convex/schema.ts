@@ -73,6 +73,7 @@ export default defineSchema({
     state: runState,
     configurationSnapshotJson: v.string(),
     traceId: v.string(),
+    missedOccurrences: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
