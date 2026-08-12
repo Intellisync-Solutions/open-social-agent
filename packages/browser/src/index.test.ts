@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertAllowedNavigation,
+  assertAllowedAuthorizationOrigin,
   detectInstalledBrowsers,
   directVerificationState,
   isolatedProfilePath,
@@ -56,6 +57,21 @@ describe("browser publication corridor", () => {
         "https://user:password@social.example/feed/acme",
       ),
     ).toThrow("DOMAIN_NOT_ALLOWED");
+  });
+
+  it("allows same-origin login paths but rejects cross-origin profile authorization", () => {
+    expect(() =>
+      assertAllowedAuthorizationOrigin(
+        "https://social.example/login",
+        "https://social.example/feed/acme",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertAllowedAuthorizationOrigin(
+        "https://identity.example/login",
+        "https://social.example/feed/acme",
+      ),
+    ).toThrow("BROWSER_AUTHORIZATION_ORIGIN_NOT_ALLOWED");
   });
 
   it("rejects typing anything except the approved body", () => {

@@ -202,6 +202,13 @@ export const reviseMine = mutation({
     if (!output || output.userId !== userId) {
       throw new ConvexError("OUTPUT_NOT_FOUND");
     }
+    const run = await ctx.db.get("runs", output.runId);
+    if (!run || run.userId !== userId) {
+      throw new ConvexError("OUTPUT_RUN_NOT_FOUND");
+    }
+    if (run.state !== "awaiting_approval") {
+      throw new ConvexError("OUTPUT_REVISION_LOCKED");
+    }
     const body = args.body.trim();
     if (output.status !== "active" || body.length < 1 || body.length > 8_000) {
       throw new ConvexError("OUTPUT_REVISION_INVALID");
@@ -230,6 +237,16 @@ export const setArchivedMine = mutation({
     const output = await ctx.db.get("outputs", args.outputId);
     if (!output || output.userId !== userId) {
       throw new ConvexError("OUTPUT_NOT_FOUND");
+    }
+    const run = await ctx.db.get("runs", output.runId);
+    if (!run || run.userId !== userId) {
+      throw new ConvexError("OUTPUT_RUN_NOT_FOUND");
+    }
+    if (
+      args.archived &&
+      (run.state === "approved" || run.state === "executing")
+    ) {
+      throw new ConvexError("OUTPUT_EXECUTION_PENDING");
     }
     await ctx.db.patch(output._id, {
       status: args.archived ? "archived" : "active",
@@ -270,10 +287,31 @@ export const purgeMine = mutation({
     if (revisions.length >= 100) {
       throw new ConvexError("OUTPUT_REVISION_LIMIT_EXCEEDED");
     }
+    const [evaluation, toolExecution, evidence] = await Promise.all([
+      ctx.db
+        .query("evaluations")
+        .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+        .unique(),
+      ctx.db
+        .query("toolExecutions")
+        .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+        .unique(),
+      ctx.db
+        .query("evidenceItems")
+        .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+        .take(101),
+    ]);
+    if (evidence.length > 100) {
+      throw new ConvexError("OUTPUT_EVIDENCE_LIMIT_EXCEEDED");
+    }
     for (const revision of revisions) await ctx.db.delete(revision._id);
+    if (evaluation) await ctx.db.delete(evaluation._id);
+    if (toolExecution) await ctx.db.delete(toolExecution._id);
+    for (const item of evidence) await ctx.db.delete(item._id);
     await ctx.db.delete(output._id);
     await ctx.db.patch(output.runId, {
       state: "cancelled",
+      blockedCode: "OUTPUT_PURGED_BY_USER",
       updatedAt: Date.now(),
     });
     return null;

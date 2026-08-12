@@ -67,3 +67,18 @@ export const saveMine = mutation({
     return await ctx.db.insert("onboardingDrafts", { ...args, userId });
   },
 });
+
+export const restartMine = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new ConvexError("AUTH_REQUIRED");
+    const existing = await ctx.db
+      .query("onboardingDrafts")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
+    return null;
+  },
+});

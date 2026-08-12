@@ -41,9 +41,7 @@ export default function DraftsPage() {
     try {
       await revise({ outputId, body });
       setEditing(null);
-      setMessage(
-        "Revision saved. Any prior approval would be stale and cannot execute.",
-      );
+      setMessage("Immutable revision saved for review.");
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "REVISION_SAVE_FAILED",
@@ -127,7 +125,8 @@ export default function DraftsPage() {
                           Cancel
                         </Button>
                       </>
-                    ) : status === "active" ? (
+                    ) : status === "active" &&
+                      draft.runState === "awaiting_approval" ? (
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -181,6 +180,12 @@ export default function DraftsPage() {
                       </>
                     )}
                   </div>
+                  {draft.revision > 1 ? (
+                    <details className="original-output">
+                      <summary>Compare immutable model output</summary>
+                      <div className="post-body">{draft.originalBody}</div>
+                    </details>
+                  ) : null}
 
                   {draft.runState === "awaiting_approval" &&
                   status === "active" ? (
@@ -315,6 +320,43 @@ export default function DraftsPage() {
                       <p>No web evidence was admitted.</p>
                     )}
                   </section>
+                  {draft.toolExecution ? (
+                    <section>
+                      <p className="eyebrow">Tool execution</p>
+                      <dl>
+                        <div>
+                          <dt>Tool / state</dt>
+                          <dd>
+                            {draft.toolExecution.tool} ·{" "}
+                            {draft.toolExecution.status}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Calls / usage</dt>
+                          <dd>
+                            {draft.toolExecution.toolCalls} ·{" "}
+                            {draft.toolExecution.totalTokens.toLocaleString()} tokens
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Model / latency</dt>
+                          <dd>
+                            {draft.toolExecution.actualModel} ·{" "}
+                            {draft.toolExecution.latencyMs}ms
+                          </dd>
+                        </div>
+                      </dl>
+                      {draft.toolExecution.queries.length ? (
+                        <ul>
+                          {draft.toolExecution.queries.map((query) => (
+                            <li key={query}>{query}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No provider search queries were reported.</p>
+                      )}
+                    </section>
+                  ) : null}
                   {draft.assumptions.length ? (
                     <section>
                       <p className="eyebrow">Assumptions</p>

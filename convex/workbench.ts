@@ -16,6 +16,7 @@ const draftSummary = v.object({
   status: v.union(v.literal("active"), v.literal("archived")),
   runState,
   body: v.string(),
+  originalBody: v.string(),
   bodyHash: v.string(),
   revision: v.number(),
   destinationUrl: v.string(),
@@ -44,6 +45,19 @@ const draftSummary = v.object({
       publishedAt: v.optional(v.number()),
     }),
   ),
+  toolExecution: v.union(
+    v.null(),
+    v.object({
+      status: v.union(v.literal("completed"), v.literal("failed")),
+      tool: v.literal("web_search"),
+      toolCalls: v.number(),
+      queries: v.array(v.string()),
+      requestedModel: v.string(),
+      actualModel: v.string(),
+      totalTokens: v.number(),
+      latencyMs: v.number(),
+    }),
+  ),
   requestedModel: v.string(),
   actualModel: v.string(),
   inputTokens: v.number(),
@@ -69,7 +83,7 @@ export const listDraftsMine = query({
 
     return await Promise.all(
       outputs.map(async (output) => {
-        const [run, revision, evaluation, evidence] = await Promise.all([
+        const [run, revision, evaluation, evidence, toolExecution] = await Promise.all([
           ctx.db.get("runs", output.runId),
           ctx.db
             .query("outputRevisions")
@@ -85,8 +99,14 @@ export const listDraftsMine = query({
             .unique(),
           ctx.db
             .query("evidenceItems")
-            .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+            .withIndex("by_runId_and_evidenceId", (q) =>
+              q.eq("runId", output.runId),
+            )
             .take(20),
+          ctx.db
+            .query("toolExecutions")
+            .withIndex("by_runId", (q) => q.eq("runId", output.runId))
+            .unique(),
         ]);
         if (
           !run ||
@@ -111,6 +131,7 @@ export const listDraftsMine = query({
           status: output.status,
           runState: run.state,
           body: revision.body,
+          originalBody: output.original.body,
           bodyHash: revision.bodyHash,
           revision: revision.revision,
           destinationUrl,
@@ -137,6 +158,19 @@ export const listDraftsMine = query({
               retrievedAt: item.retrievedAt,
               publishedAt: item.publishedAt,
             })),
+          toolExecution:
+            toolExecution?.userId === userId
+              ? {
+                  status: toolExecution.status,
+                  tool: toolExecution.tool,
+                  toolCalls: toolExecution.toolCalls,
+                  queries: parseQueries(toolExecution.queriesJson),
+                  requestedModel: toolExecution.requestedModel,
+                  actualModel: toolExecution.actualModel,
+                  totalTokens: toolExecution.totalTokens,
+                  latencyMs: toolExecution.latencyMs,
+                }
+              : null,
           requestedModel: output.requestedModel,
           actualModel: output.actualModel,
           inputTokens: output.inputTokens,
@@ -151,6 +185,19 @@ export const listDraftsMine = query({
   },
 });
 
+function parseQueries(value: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is string => typeof item === "string")
+      .slice(0, 20)
+      .map((item) => item.slice(0, 500));
+  } catch {
+    return [];
+  }
+}
+
 const runSummary = v.object({
   runId: v.id("runs"),
   scheduleId: v.id("schedules"),
@@ -160,6 +207,8 @@ const runSummary = v.object({
   scheduledFor: v.number(),
   traceId: v.string(),
   missedOccurrences: v.optional(v.number()),
+  archivedAt: v.optional(v.number()),
+  blockedCode: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
   outputId: v.optional(v.id("outputs")),
@@ -213,6 +262,8 @@ export const listRunsMine = query({
           scheduledFor: run.scheduledFor,
           traceId: run.traceId,
           missedOccurrences: run.missedOccurrences,
+          archivedAt: run.archivedAt,
+          blockedCode: run.blockedCode,
           createdAt: run.createdAt,
           updatedAt: run.updatedAt,
           outputId: output?.userId === userId ? output._id : undefined,
@@ -272,10 +323,13 @@ export const getDashboardMine = query({
           .query("runs")
           .withIndex("by_userId", (q) => q.eq("userId", userId))
           .order("desc")
-          .take(5),
+          .take(25),
       ]);
+    const visibleRecentRuns = recentRuns
+      .filter((run) => run.archivedAt === undefined)
+      .slice(0, 5);
     const summaries = await Promise.all(
-      recentRuns.map(async (run) => {
+      visibleRecentRuns.map(async (run) => {
         const [schedule, output, receipt] = await Promise.all([
           ctx.db.get("schedules", run.scheduleId),
           ctx.db
@@ -301,6 +355,8 @@ export const getDashboardMine = query({
           scheduledFor: run.scheduledFor,
           traceId: run.traceId,
           missedOccurrences: run.missedOccurrences,
+          archivedAt: run.archivedAt,
+          blockedCode: run.blockedCode,
           createdAt: run.createdAt,
           updatedAt: run.updatedAt,
           outputId: output?.userId === userId ? output._id : undefined,

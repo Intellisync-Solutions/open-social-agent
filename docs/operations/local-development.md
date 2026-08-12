@@ -1,6 +1,6 @@
 # Local Development
 
-Status: current through the approval and deterministic browser-corridor slice.
+Status: current through V1 acceptance closure.
 
 ## Install and validate
 
@@ -139,6 +139,23 @@ Unknown citations, known-stale evidence, exclusions, token-gate overruns, and
 likely duplicates block the run before approval. Unavailable publication dates
 remain a visible freshness warning. This endpoint is also disabled unless
 `OSA_ENABLE_GENERATION=1`.
+
+After runner registration, the settings surface can open a detected browser in
+the app-owned profile used by publication. The operator supplies the exact
+HTTPS destination and completes login manually. Top-level navigation is
+restricted to that origin. The returned state is `opened` with
+`loginVerified: false`; neither profile creation nor navigation proves a valid
+account session.
+
+The configured daily token gate uses UTC calendar days. Before a paid claim,
+the data plane sums recorded composition and research usage and requires enough
+remaining budget for the full configured per-run gate. An insufficient or
+unbounded usage scan blocks the run before provider access.
+
+Terminal run history can be archived and restored. Permanent purge requires
+the displayed trace prefix and succeeds only for evidence-free run envelopes;
+any output, research/tool evidence, evaluation, approval, claim, or publication
+receipt is retained.
 
 To process queued preparation runs in the local runner without an open web
 session, explicitly enable bounded polling:

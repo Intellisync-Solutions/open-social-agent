@@ -86,7 +86,7 @@ export const getExecutableMine = query({
     if (!approval || approval.userId !== userId || approval.decision !== "approved" || approval.expiresAt <= Date.now()) return null;
     const output = await ctx.db.get("outputs", approval.outputId);
     const revision = await ctx.db.query("outputRevisions").withIndex("by_outputId_and_revision", (q) => q.eq("outputId", approval.outputId).eq("revision", approval.revision)).unique();
-    if (!output || !revision || output.userId !== userId || output.currentRevision !== approval.revision || revision.bodyHash !== approval.bodyHash) return null;
+    if (!output || !revision || output.userId !== userId || output.status !== "active" || output.currentRevision !== approval.revision || revision.bodyHash !== approval.bodyHash) return null;
     return { approvalId: approval._id, outputId: output._id, revision: approval.revision, body: revision.body, bodyHash: revision.bodyHash, destinationUrl: approval.destinationUrl, expiresAt: approval.expiresAt };
   },
 });

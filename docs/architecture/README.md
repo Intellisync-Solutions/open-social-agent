@@ -9,10 +9,10 @@ Next.js operator desk, shared contracts, auth-scoped resumable persistence,
 and a loopback-only local secret and execution boundary.
 
 `BUILD_INIT.md` has `architecture_status: approved` and
-`implementation_status: partial`. Provider-backed harness and isolated-browser
-execution paths are implemented but remain explicit, disabled-by-default local
-actions. Automatic scheduling and any deployed or live-provider proof are not
-shipped.
+`implementation_status: current`. The approved V1 code boundary is implemented;
+provider-backed harness and isolated-browser execution remain explicit,
+disabled-by-default local actions. Nothing has been deployed, and no
+live-provider search/computer or real-account publication proof is claimed.
 
 ## Implemented seams
 
@@ -67,6 +67,16 @@ shipped.
   backlog into one latest preparation and records the skipped occurrence count
 - `apps/runner`: disabled-by-default, bounded local polling that claims at most
   one queued generation run per interval and never polls approved publication
+- `convex`: restartable onboarding plus terminal run cancellation,
+  archive/restore, and exact-confirmation purge that refuses to remove any run
+  carrying output, tool, evidence, evaluation, approval, claim, or receipt data
+- `convex`: a UTC daily usage gate reserves the configured per-run ceiling
+  before a queued run can be claimed, and records a visible block code
+- `apps/web`: immutable original model output and bounded tool-execution details
+  are visible beside current revisions and evidence
+- `apps/runner` + `packages/browser`: selected installed browsers open an
+  app-owned profile for manual login under an exact HTTPS-origin guard; the
+  durable marker truthfully says login is unverified
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -74,7 +84,8 @@ but no provider secret field or transport.
 
 ## Planned seams
 
-- `apps/web`: dedicated destination records and finer-grained audit-retention UI
+- `apps/web`: dedicated destination records if future multi-destination profile
+  reuse demonstrates a need; V1 owns the exact destination inside each profile
 - `packages/providers`: full Responses-compatible generation capabilities
 - `packages/ui`: accessible shared interface components
 - `convex`: authenticated durable data, scheduling, runs, receipts, audit
@@ -98,8 +109,8 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is the final V1 requirement, security, accessibility, and release
-audit. Cron and polling code are locally validated but not deployed.
+The next gate is owner review and optional deployment/live-provider evidence.
+Cron and polling code are locally validated but not deployed.
 Luna structured output, synthetic-provider research, and the synthetic-provider
 computer loop over a controlled browser are locally verified; Terra, Sol,
 live search, alternate providers, live-provider computer use, and real social

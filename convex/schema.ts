@@ -74,6 +74,8 @@ export default defineSchema({
     configurationSnapshotJson: v.string(),
     traceId: v.string(),
     missedOccurrences: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    blockedCode: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -100,6 +102,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_userId_and_status", ["userId", "status"])
+    .index("by_userId_and_createdAt", ["userId", "createdAt"])
     .index("by_runId", ["runId"]),
   toolExecutions: defineTable({
     userId: v.id("users"),
@@ -116,7 +119,9 @@ export default defineSchema({
     toolCalls: v.number(),
     queriesJson: v.string(),
     createdAt: v.number(),
-  }).index("by_runId", ["runId"]),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_userId_and_createdAt", ["userId", "createdAt"]),
   evidenceItems: defineTable({
     userId: v.id("users"),
     runId: v.id("runs"),
@@ -128,7 +133,9 @@ export default defineSchema({
     publishedAt: v.optional(v.number()),
     contentHash: v.string(),
     createdAt: v.number(),
-  }).index("by_runId", ["runId"]),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_runId_and_evidenceId", ["runId", "evidenceId"]),
   evaluations: defineTable({
     userId: v.id("users"),
     runId: v.id("runs"),
@@ -221,5 +228,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_runId", ["runId"])
+    .index("by_userId_and_status", ["userId", "status"])
     .index("by_runnerId_and_requestId", ["runnerId", "requestId"]),
 });

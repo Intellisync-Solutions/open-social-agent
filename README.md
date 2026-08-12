@@ -8,7 +8,7 @@ and pause for approval immediately before posting.
 
 ## Current status
 
-**Architecture v0.1 approved — implementation is underway.**
+**Architecture v0.1 approved — the V1 code boundary is locally implemented.**
 
 Read:
 
@@ -53,12 +53,19 @@ the user's control of the public action.
   claim-bound receipt transport, with local computer processing disabled by default
 - leased queued-run claims for domain-filtered OpenAI web research, citation
   admission, duplicate/evidence evaluation, and durable tool/evidence receipts
+- due-run reconciliation with bounded local polling and pre-provider UTC daily
+  token-gate enforcement
+- restartable onboarding, original-output/tool history, and evidence-safe run
+  cancel/archive/restore/purge controls
+- explicit app-owned browser-profile opening for manual login, with exact-origin
+  enforcement and truthful unverified-login state
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Automatic runner polling, cron activation, live-provider research/computer use,
-real-account browser authorization, and posting remain incomplete. Luna
-structured composition has a guarded local verification; Terra, Sol, live web
-search, live computer use, and real social publication remain unverified.
+No Convex cron or web build has been deployed. Live-provider research/computer
+use, authenticated real-account browser state, and social publication remain
+unverified release gates. Luna structured composition has a guarded local
+verification; Terra, Sol, live web search, live computer use, and real social
+publication remain unverified.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
 implemented/planned boundary.
 

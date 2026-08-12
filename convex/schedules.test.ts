@@ -90,6 +90,11 @@ const listWorkbenchDrafts = makeFunctionReference<"query">(
 const getWorkbenchDashboard = makeFunctionReference<"query">(
   "workbench:getDashboardMine",
 );
+const setRunArchived = makeFunctionReference<"mutation">(
+  "runHistory:setArchivedMine",
+);
+const cancelRun = makeFunctionReference<"mutation">("runHistory:cancelMine");
+const purgeRun = makeFunctionReference<"mutation">("runHistory:purgeMine");
 
 async function authenticatedTest() {
   const t = convexTest(schema, modules);
@@ -161,6 +166,159 @@ describe("auth-scoped automation persistence", () => {
         requestId: "manual-request-0002",
       }),
     ).rejects.toThrow("SCHEDULE_NOT_RUNNABLE");
+  });
+
+  it("cancels, archives, restores, and explicitly purges an evidence-free run", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Disposable dry run",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-disposable-history-01",
+    });
+    await alice.mutation(cancelRun, { runId });
+    await alice.mutation(setRunArchived, { runId, archived: true });
+    await alice.mutation(setRunArchived, { runId, archived: false });
+    await alice.mutation(setRunArchived, { runId, archived: true });
+    const run = await t.run(async (ctx) => await ctx.db.get("runs", runId));
+    await alice.mutation(purgeRun, {
+      runId,
+      confirmTrace: run!.traceId.slice(0, 12),
+    });
+    expect(await t.run(async (ctx) => await ctx.db.get("runs", runId))).toBeNull();
+  });
+
+  it("blocks a claim before paid work when the UTC daily gate cannot cover one run", async () => {
+    const { alice, t } = await authenticatedTest();
+    const constrainedProfile = {
+      ...profileInput,
+      model: {
+        ...profileInput.model,
+        maxOutputTokens: 256,
+        perRunTokenGate: 256,
+        dailyTokenGate: 256,
+      },
+    };
+    const profileId = await alice.mutation(createProfile, constrainedProfile);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Daily gate",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const firstRunId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-daily-gate-first-01",
+    });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", firstRunId),
+    ))!.userId;
+    await t.run(async (ctx) => {
+      await ctx.db.patch(firstRunId, { state: "cancelled" });
+      await ctx.db.insert("outputs", {
+        userId,
+        runId: firstRunId,
+        original: {
+          body: "Prior usage.",
+          assumptions: [],
+          riskFlags: [],
+          sourceMap: [],
+        },
+        originalHash: "a".repeat(64),
+        currentRevision: 1,
+        status: "active",
+        providerResponseId: "resp_prior_usage",
+        requestedModel: "configured-at-runtime",
+        actualModel: "configured-at-runtime",
+        inputTokens: 1,
+        outputTokens: 0,
+        totalTokens: 1,
+        latencyMs: 1,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+    const secondRunId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-daily-gate-second-01",
+    });
+    const runner = await alice.mutation(provisionRunner, {
+      label: "Daily gate runner",
+    });
+    expect(
+      await t.mutation(claimQueued, {
+        registrationId: runner.registrationId,
+        userId,
+        runnerId: runner.runnerId,
+        requestId: "claim-daily-gate-second-01",
+        now: Date.now(),
+      }),
+    ).toBeNull();
+    expect(
+      (await t.run(async (ctx) => await ctx.db.get("runs", secondRunId)))?.state,
+    ).toBe("blocked");
+    expect(
+      (await t.run(async (ctx) => await ctx.db.get("runs", secondRunId)))
+        ?.blockedCode,
+    ).toBe("DAILY_TOKEN_GATE_REACHED");
+  });
+
+  it("allows only one active generation lease per operator", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Single lease",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const firstRunId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-single-lease-first-01",
+    });
+    const secondRunId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-single-lease-second-01",
+    });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", firstRunId),
+    ))!.userId;
+    const firstRunner = await alice.mutation(provisionRunner, {
+      label: "First lease runner",
+    });
+    const secondRunner = await alice.mutation(provisionRunner, {
+      label: "Second lease runner",
+    });
+    const now = Date.now();
+    expect(
+      await t.mutation(claimQueued, {
+        registrationId: firstRunner.registrationId,
+        userId,
+        runnerId: firstRunner.runnerId,
+        requestId: "claim-single-lease-first-01",
+        now,
+      }),
+    ).toMatchObject({ runId: firstRunId });
+    expect(
+      await t.mutation(claimQueued, {
+        registrationId: secondRunner.registrationId,
+        userId,
+        runnerId: secondRunner.runnerId,
+        requestId: "claim-single-lease-second-01",
+        now,
+      }),
+    ).toBeNull();
+    expect(
+      (await t.run(async (ctx) => await ctx.db.get("runs", secondRunId)))?.state,
+    ).toBe("queued");
   });
 
   it("keeps composed workbench views isolated by authenticated user", async () => {
@@ -343,6 +501,77 @@ describe("auth-scoped automation persistence", () => {
       "User-edited revision.",
     ]);
     expect(state.run?.state).toBe("awaiting_approval");
+  });
+
+  it("purges an unapproved output without leaving dependent evidence dangling", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Purge draft",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-purge-output-run-01",
+    });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const runner = await alice.mutation(provisionRunner, {
+      label: "Purge output runner",
+    });
+    const executionRequestId = "claim-purge-output-run-01";
+    await t.mutation(claimQueued, {
+      registrationId: runner.registrationId,
+      userId,
+      runnerId: runner.runnerId,
+      requestId: executionRequestId,
+      now: Date.now(),
+    });
+    const outputId = (
+      await t.mutation(saveHarnessResult, {
+        userId,
+        runId,
+        runnerRegistrationId: runner.registrationId,
+        executionRequestId,
+        executionJson: harnessJson("AI operations purgeable draft."),
+      })
+    ).outputId;
+    const output = await t.run(
+      async (ctx) => await ctx.db.get("outputs", outputId),
+    );
+    await alice.mutation(setOutputArchived, { outputId, archived: true });
+    await alice.mutation(purgeOutput, {
+      outputId,
+      confirmHash: output!.originalHash.slice(0, 12),
+    });
+    const state = await t.run(async (ctx) => ({
+      run: await ctx.db.get("runs", runId),
+      output: await ctx.db.get("outputs", outputId),
+      tool: await ctx.db
+        .query("toolExecutions")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .first(),
+      evidence: await ctx.db
+        .query("evidenceItems")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .first(),
+      evaluation: await ctx.db
+        .query("evaluations")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .first(),
+    }));
+    expect(state.output).toBeNull();
+    expect(state.tool).toBeNull();
+    expect(state.evidence).toBeNull();
+    expect(state.evaluation).toBeNull();
+    expect(state.run).toMatchObject({
+      state: "cancelled",
+      blockedCode: "OUTPUT_PURGED_BY_USER",
+    });
   });
 
   it("persists research evidence and blocks a failed deterministic evaluation", async () => {
@@ -574,6 +803,15 @@ describe("auth-scoped automation persistence", () => {
       expiresAt: Date.now() + 60_000,
       decision: "approved",
     });
+    await expect(
+      alice.mutation(reviseOutput, {
+        outputId,
+        body: "Editing after approval must fail closed.",
+      }),
+    ).rejects.toThrow("OUTPUT_REVISION_LOCKED");
+    await expect(
+      alice.mutation(setOutputArchived, { outputId, archived: true }),
+    ).rejects.toThrow("OUTPUT_EXECUTION_PENDING");
     const userId = (await t.run(
       async (ctx) => await ctx.db.get("runs", runId),
     ))!.userId;
