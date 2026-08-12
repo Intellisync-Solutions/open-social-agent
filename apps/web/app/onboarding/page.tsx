@@ -22,7 +22,6 @@ import { useState } from "react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const stepCopy: Record<
@@ -745,10 +744,10 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="field">
-      <Label>{label}</Label>
+    <label className="field">
+      <span>{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 function Select({

@@ -91,6 +91,9 @@ would send, post, submit, or represent the user to a third party.
   gated local processing endpoint
 - Leased queued-run harness claims, allowlisted OpenAI web search, deterministic
   citation/evidence/duplicate gates, and durable research/evaluation evidence
+- Authenticated editorial operator desk for profile/destination and schedule
+  lifecycle, runs, evidence-backed drafts, exact approvals, receipts, trusted
+  runner registration, and explicit one-item processing
 
 Automatic cron activation, OpenAI search/computer live-provider verification,
 runner polling, and real-account publication verification remain planned.

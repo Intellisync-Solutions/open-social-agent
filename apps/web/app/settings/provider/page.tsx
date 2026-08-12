@@ -1,6 +1,7 @@
 "use client";
 
 import type { RunnerProviderKind } from "@open-social-agent/contracts";
+import { useMutation, useQuery } from "convex/react";
 import {
   Check,
   KeyRound,
@@ -8,9 +9,12 @@ import {
   Link2,
   ShieldAlert,
   Trash2,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,13 +23,17 @@ import { parseLoopbackRunnerUrl } from "@/lib/runner-url";
 const runnerUrl = parseLoopbackRunnerUrl(
   process.env.NEXT_PUBLIC_OSA_RUNNER_URL,
 );
+const convexSiteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
 type RunnerState = "checking" | "offline" | "pairing" | "paired";
 type SecretStatus = {
   provider: RunnerProviderKind;
   configured: boolean;
   fingerprint: string | null;
 };
-type BrowserSummary = { kind: string; label: string };
+type BrowserSummary = {
+  kind: "brave" | "chrome" | "edge" | "chromium";
+  label: string;
+};
 type CapabilityResult = {
   reachable: boolean;
   authenticated: boolean;
@@ -35,6 +43,9 @@ type CapabilityResult = {
 };
 
 export default function ProviderSettingsPage() {
+  const registrations = useQuery(api.runners.listMine);
+  const provision = useMutation(api.runners.provisionMine);
+  const revoke = useMutation(api.runners.revokeMine);
   const [runnerState, setRunnerState] = useState<RunnerState>("checking");
   const [provider, setProvider] = useState<RunnerProviderKind>("openai");
   const [status, setStatus] = useState<SecretStatus | null>(null);
@@ -43,6 +54,8 @@ export default function ProviderSettingsPage() {
     null,
   );
   const [message, setMessage] = useState<string | null>(null);
+  const [browserKind, setBrowserKind] =
+    useState<BrowserSummary["kind"]>("brave");
   const secretForm = useRef<HTMLFormElement>(null);
 
   async function request(path: string, init?: RequestInit) {
@@ -56,6 +69,92 @@ export default function ProviderSettingsPage() {
     if (!response.ok)
       throw new Error(body?.error?.code ?? "RUNNER_REQUEST_FAILED");
     return body;
+  }
+
+  async function registerDevice(formData: FormData) {
+    setMessage(null);
+    let registrationId: Id<"runnerRegistrations"> | null = null;
+    try {
+      if (!convexSiteUrl) throw new Error("CONVEX_SITE_URL_MISSING");
+      const created = await provision({
+        label: String(formData.get("label") ?? "Local runner"),
+      });
+      registrationId = created.registrationId;
+      await request("/v1/runner-device", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          runnerId: created.runnerId,
+          token: created.token,
+          siteUrl: convexSiteUrl,
+        }),
+      });
+      setMessage(
+        "Trusted runner registered. The one-time token now exists only in the local secret store.",
+      );
+    } catch (error) {
+      if (registrationId) {
+        try {
+          await revoke({ registrationId });
+        } catch {
+          /* A visible active row remains revocable if rollback fails. */
+        }
+      }
+      setMessage(
+        error instanceof Error ? error.message : "RUNNER_REGISTRATION_FAILED",
+      );
+    }
+  }
+
+  async function processHarness() {
+    setMessage(null);
+    try {
+      const result = await request("/v1/process-harness", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-osa-request": "execution",
+        },
+        body: JSON.stringify({
+          requestId: crypto.randomUUID().replaceAll("-", ""),
+        }),
+      });
+      setMessage(
+        result
+          ? "One queued run was researched, composed, and evaluated. Review its durable result in Drafts."
+          : "No queued run was available to claim.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "HARNESS_PROCESS_FAILED",
+      );
+    }
+  }
+
+  async function processApproved() {
+    setMessage(null);
+    try {
+      const result = await request("/v1/process-approved", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-osa-request": "execution",
+        },
+        body: JSON.stringify({
+          requestId: crypto.randomUUID().replaceAll("-", ""),
+          browserKind,
+        }),
+      });
+      setMessage(
+        result
+          ? `Runner recorded ${result.state ?? "a terminal result"}. Verify it in History.`
+          : "No current approved run was available to claim.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "APPROVED_PROCESS_FAILED",
+      );
+    }
   }
 
   async function checkRunner() {
@@ -335,6 +434,58 @@ export default function ProviderSettingsPage() {
                 </form>
               ) : null}
               <div className="settings-block">
+                <h2>Trusted runner device</h2>
+                <p>
+                  Provision a revocable server identity and transfer its
+                  one-time token directly to this paired loopback runner.
+                </p>
+                <form action={registerDevice} className="inline-settings-form">
+                  <Label htmlFor="runnerLabel">Device label</Label>
+                  <Input
+                    id="runnerLabel"
+                    name="label"
+                    defaultValue="This Mac"
+                    maxLength={80}
+                    required
+                    autoComplete="off"
+                  />
+                  <Button variant="outline" type="submit">
+                    <Laptop size={15} /> Register device
+                  </Button>
+                </form>
+                {registrations?.length ? (
+                  <ul className="runner-list">
+                    {registrations.map((registration) => (
+                      <li key={registration._id}>
+                        <div>
+                          <strong>{registration.label}</strong>
+                          <small>
+                            {registration.status} ·{" "}
+                            {registration.lastSeenAt
+                              ? `seen ${new Date(registration.lastSeenAt).toLocaleString()}`
+                              : "not yet used"}
+                          </small>
+                        </div>
+                        {registration.status === "active" ? (
+                          <Button
+                            aria-label={`Revoke ${registration.label}`}
+                            size="icon"
+                            variant="outline"
+                            onClick={() =>
+                              void revoke({ registrationId: registration._id })
+                            }
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No durable runner identity is registered.</p>
+                )}
+              </div>
+              <div className="settings-block">
                 <h2>Detected supported browsers</h2>
                 {browsers.length ? (
                   <ul className="browser-list">
@@ -351,6 +502,45 @@ export default function ProviderSettingsPage() {
                     opened.
                   </p>
                 )}
+              </div>
+              <div className="settings-block guarded-actions">
+                <h2>Process one item</h2>
+                <p>
+                  These explicit actions never start polling. The runner must
+                  also have the matching startup gate enabled.
+                </p>
+                <Button variant="outline" onClick={() => void processHarness()}>
+                  <Zap size={15} /> Process 1 queued draft
+                </Button>
+                <Label htmlFor="executionBrowser">
+                  Browser for approved publication
+                </Label>
+                <select
+                  id="executionBrowser"
+                  value={browserKind}
+                  onChange={(event) =>
+                    setBrowserKind(event.target.value as BrowserSummary["kind"])
+                  }
+                >
+                  {browsers.map((browser) => (
+                    <option key={browser.kind} value={browser.kind}>
+                      {browser.label}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  className="consequential-action"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Process one currently approved exact revision in the selected isolated browser? The approval must still be current.",
+                      )
+                    )
+                      void processApproved();
+                  }}
+                >
+                  <ShieldAlert size={15} /> Process 1 approved post
+                </Button>
               </div>
             </>
           ) : null}

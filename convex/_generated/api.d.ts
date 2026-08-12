@@ -19,6 +19,7 @@ import type * as runnerHttp from "../runnerHttp.js";
 import type * as runners from "../runners.js";
 import type * as schedules from "../schedules.js";
 import type * as validators from "../validators.js";
+import type * as workbench from "../workbench.js";
 
 import type {
   ApiFromModules,
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   runners: typeof runners;
   schedules: typeof schedules;
   validators: typeof validators;
+  workbench: typeof workbench;
 }>;
 
 /**

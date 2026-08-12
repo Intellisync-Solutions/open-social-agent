@@ -76,6 +76,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_userId", ["userId"])
     .index("by_userId_and_state", ["userId", "state"])
     .index("by_scheduleId", ["scheduleId"])
     .index("by_occurrenceKey", ["occurrenceKey"]),
@@ -178,7 +179,9 @@ export default defineSchema({
     totalTokens: v.number(),
     turns: v.number(),
     actionsExecuted: v.number(),
-  }).index("by_runId", ["runId"]),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_runId", ["runId"]),
   runnerRegistrations: defineTable({
     userId: v.id("users"),
     runnerId: v.string(),
