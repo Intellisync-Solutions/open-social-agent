@@ -5,13 +5,14 @@ Last verified: 2026-08-12
 ## Current truth
 
 The governed scaffold and local-runner slices are implemented: an authenticated
-Next.js shell, shared onboarding contracts, auth-scoped resumable persistence,
-and a loopback-only local secret and provider-authentication boundary.
+Next.js operator desk, shared contracts, auth-scoped resumable persistence,
+and a loopback-only local secret and execution boundary.
 
 `BUILD_INIT.md` has `architecture_status: approved` and
-`implementation_status: partial`. Future contributors must not describe
-provider-backed harness execution, automatic scheduling, isolated browser
-execution, history, approval, or receipt layers as shipped.
+`implementation_status: partial`. Provider-backed harness and isolated-browser
+execution paths are implemented but remain explicit, disabled-by-default local
+actions. Automatic scheduling and any deployed or live-provider proof are not
+shipped.
 
 ## Implemented seams
 
@@ -56,6 +57,12 @@ execution, history, approval, or receipt layers as shipped.
   freshness, exclusion, topic, token-budget, and recent-output duplicate gates
 - `convex`: leased queued-run harness claims and durable tool, evidence, and
   server-recomputed evaluation records; failed evaluations cannot reach approval
+- `apps/web`: authenticated dashboard, profile/destination and schedule CRUD,
+  run ledger, evidence-backed draft review, immutable revision editing, exact
+  approval/rejection, receipt history, trusted-runner registration, and explicit
+  one-item processing controls
+- `convex`: bounded auth-scoped workbench queries compose only owned durable
+  records; tenant-isolation tests cover runs, drafts, and dashboard summaries
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -63,13 +70,9 @@ but no provider secret field or transport.
 
 ## Planned seams
 
-- `apps/web`: settings, CRUD, run/approval/history UI beyond onboarding
-- `apps/runner`: local due-run claimant and computer-use execution
-- `packages/contracts`: versioned cross-boundary schemas
-- `packages/harness`: provider-backed research, evidence admission, evaluation,
-  approval, and receipts beyond the zero-post/composition guard
-- `packages/browser`: installed-browser detection and isolated execution
-- `packages/providers`: OpenAI and Responses-compatible adapters
+- `apps/web`: dedicated destination records and finer-grained audit-retention UI
+- `apps/runner`: governed due-run polling and missed-run processing
+- `packages/providers`: full Responses-compatible generation capabilities
 - `packages/scheduling`: missed-run policy beyond implemented recurrence
 - `packages/ui`: accessible shared interface components
 - `convex`: authenticated durable data, scheduling, runs, receipts, audit
@@ -93,8 +96,9 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is the authenticated V1 CRUD and review UI, followed by runner
-polling. Automatic cron remains disabled until those end-to-end paths exist.
+The next slice is governed due-run scheduling and runner polling with explicit
+missed-run behavior. Automatic cron remains disabled until that end-to-end path
+is implemented and verified.
 Luna structured output, synthetic-provider research, and the synthetic-provider
 computer loop over a controlled browser are locally verified; Terra, Sol,
 live search, alternate providers, live-provider computer use, and real social

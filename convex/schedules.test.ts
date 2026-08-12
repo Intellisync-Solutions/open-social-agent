@@ -4,9 +4,11 @@ import { makeFunctionReference } from "convex/server";
 import { describe, expect, it } from "vitest";
 import schema from "./schema";
 
-const modules = (import.meta as ImportMeta & {
-  glob: (pattern: string) => Record<string, () => Promise<unknown>>;
-}).glob("./**/*.ts");
+const modules = (
+  import.meta as ImportMeta & {
+    glob: (pattern: string) => Record<string, () => Promise<unknown>>;
+  }
+).glob("./**/*.ts");
 const profileInput: AutomationProfileInput = {
   name: "Build with Evidence",
   destination: {
@@ -55,30 +57,47 @@ const enqueueDue = makeFunctionReference<
 const listProfiles = makeFunctionReference<"query">(
   "automationProfiles:listMine",
 );
-const saveHarnessResult = makeFunctionReference<"mutation">("outputs:saveHarnessResultInternal");
+const saveHarnessResult = makeFunctionReference<"mutation">(
+  "outputs:saveHarnessResultInternal",
+);
 const reviseOutput = makeFunctionReference<"mutation">("outputs:reviseMine");
 const setOutputArchived = makeFunctionReference<"mutation">(
   "outputs:setArchivedMine",
 );
 const purgeOutput = makeFunctionReference<"mutation">("outputs:purgeMine");
-const decideApproval = makeFunctionReference<"mutation">("approvals:decideMine");
+const decideApproval = makeFunctionReference<"mutation">(
+  "approvals:decideMine",
+);
 const recordReceipt = makeFunctionReference<"mutation">(
   "receipts:recordVerified",
 );
-const provisionRunner = makeFunctionReference<"mutation">("runners:provisionMine");
+const provisionRunner = makeFunctionReference<"mutation">(
+  "runners:provisionMine",
+);
 const listRunners = makeFunctionReference<"query">("runners:listMine");
 const claimApproved = makeFunctionReference<"mutation">(
   "runners:claimApprovedInternal",
 );
-const claimQueued = makeFunctionReference<"mutation">("runners:claimQueuedInternal");
+const claimQueued = makeFunctionReference<"mutation">(
+  "runners:claimQueuedInternal",
+);
+const listWorkbenchRuns = makeFunctionReference<"query">(
+  "workbench:listRunsMine",
+);
+const listWorkbenchDrafts = makeFunctionReference<"query">(
+  "workbench:listDraftsMine",
+);
+const getWorkbenchDashboard = makeFunctionReference<"query">(
+  "workbench:getDashboardMine",
+);
 
 async function authenticatedTest() {
   const t = convexTest(schema, modules);
-  const aliceId = await t.run(async (ctx) =>
-    await ctx.db.insert("users", { email: "alice@example.com" }),
+  const aliceId = await t.run(
+    async (ctx) => await ctx.db.insert("users", { email: "alice@example.com" }),
   );
-  const bobId = await t.run(async (ctx) =>
-    await ctx.db.insert("users", { email: "bob@example.com" }),
+  const bobId = await t.run(
+    async (ctx) => await ctx.db.insert("users", { email: "bob@example.com" }),
   );
   return {
     t,
@@ -111,17 +130,19 @@ describe("auth-scoped automation persistence", () => {
     const first = await alice.mutation(runNow, { scheduleId, requestId });
     const second = await alice.mutation(runNow, { scheduleId, requestId });
     expect(second).toBe(first);
-    const persisted = await t.run(async (ctx) => await ctx.db.get("runs", first));
-    expect(persisted?.state).toBe("queued");
-    expect(JSON.parse(persisted?.configurationSnapshotJson ?? "{}")).toMatchObject(
-      {
-        schemaVersion: 1,
-        profileRevision: 1,
-        scheduleRevision: 1,
-        profile: { name: profileInput.name },
-        schedule: { name: "Daily signal" },
-      },
+    const persisted = await t.run(
+      async (ctx) => await ctx.db.get("runs", first),
     );
+    expect(persisted?.state).toBe("queued");
+    expect(
+      JSON.parse(persisted?.configurationSnapshotJson ?? "{}"),
+    ).toMatchObject({
+      schemaVersion: 1,
+      profileRevision: 1,
+      scheduleRevision: 1,
+      profile: { name: profileInput.name },
+      schedule: { name: "Daily signal" },
+    });
   });
 
   it("does not let another user run a schedule", async () => {
@@ -142,6 +163,59 @@ describe("auth-scoped automation persistence", () => {
     ).rejects.toThrow("SCHEDULE_NOT_RUNNABLE");
   });
 
+  it("keeps composed workbench views isolated by authenticated user", async () => {
+    const { alice, bob, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Private signal",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-private-workbench-01",
+    });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const runner = await alice.mutation(provisionRunner, {
+      label: "Private workbench runner",
+    });
+    const executionRequestId = "private-workbench-harness-01";
+    await t.mutation(claimQueued, {
+      registrationId: runner.registrationId,
+      userId,
+      runnerId: runner.runnerId,
+      requestId: executionRequestId,
+      now: Date.now(),
+    });
+    await t.mutation(saveHarnessResult, {
+      userId,
+      runId,
+      runnerRegistrationId: runner.registrationId,
+      executionRequestId,
+      executionJson: harnessJson("Alice private AI operations draft."),
+    });
+
+    expect(await alice.query(listWorkbenchRuns, { limit: 10 })).toHaveLength(1);
+    expect(await bob.query(listWorkbenchRuns, { limit: 10 })).toHaveLength(0);
+    expect(
+      await alice.query(listWorkbenchDrafts, { status: "active" }),
+    ).toHaveLength(1);
+    expect(await bob.query(listWorkbenchDrafts, { status: "active" })).toEqual(
+      [],
+    );
+    expect(await bob.query(getWorkbenchDashboard, {})).toMatchObject({
+      activeProfiles: 0,
+      activeSchedules: 0,
+      draftsAwaitingApproval: 0,
+      liveReceipts: 0,
+      recentRuns: [],
+    });
+  });
+
   it("enqueues one run per due occurrence and advances the schedule", async () => {
     const { alice, t } = await authenticatedTest();
     const profileId = await alice.mutation(createProfile, profileInput);
@@ -156,17 +230,18 @@ describe("auth-scoped automation persistence", () => {
     await t.run(async (ctx) => {
       await ctx.db.patch(scheduleId, { status: "active", nextRunAt: dueAt });
     });
-    expect(
-      await t.mutation(enqueueDue, { now: dueAt + 1, limit: 10 }),
-    ).toEqual({ created: 1, advanced: 1 });
-    expect(
-      await t.mutation(enqueueDue, { now: dueAt + 1, limit: 10 }),
-    ).toEqual({ created: 0, advanced: 0 });
-    const runs = await t.run(async (ctx) =>
-      await ctx.db
-        .query("runs")
-        .withIndex("by_scheduleId", (q) => q.eq("scheduleId", scheduleId))
-        .take(2),
+    expect(await t.mutation(enqueueDue, { now: dueAt + 1, limit: 10 })).toEqual(
+      { created: 1, advanced: 1 },
+    );
+    expect(await t.mutation(enqueueDue, { now: dueAt + 1, limit: 10 })).toEqual(
+      { created: 0, advanced: 0 },
+    );
+    const runs = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("runs")
+          .withIndex("by_scheduleId", (q) => q.eq("scheduleId", scheduleId))
+          .take(2),
     );
     expect(runs).toHaveLength(1);
     expect(runs[0]?.scheduledFor).toBe(dueAt);
@@ -186,14 +261,29 @@ describe("auth-scoped automation persistence", () => {
       scheduleId,
       requestId: "manual-request-output-0001",
     });
-    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
-    const runner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const runner = await alice.mutation(provisionRunner, {
+      label: "Harness runner",
+    });
     const harnessRequest = "harness-request-output-01";
-    await t.mutation(claimQueued, { registrationId: runner.registrationId, userId, runnerId: runner.runnerId, requestId: harnessRequest, now: Date.now() });
-    const outputId = (await t.mutation(saveHarnessResult, {
-      userId, runId, runnerRegistrationId: runner.registrationId, executionRequestId: harnessRequest,
-      executionJson: harnessJson("AI operations original model output."),
-    })).outputId;
+    await t.mutation(claimQueued, {
+      registrationId: runner.registrationId,
+      userId,
+      runnerId: runner.runnerId,
+      requestId: harnessRequest,
+      now: Date.now(),
+    });
+    const outputId = (
+      await t.mutation(saveHarnessResult, {
+        userId,
+        runId,
+        runnerRegistrationId: runner.registrationId,
+        executionRequestId: harnessRequest,
+        executionJson: harnessJson("AI operations original model output."),
+      })
+    ).outputId;
     expect(
       await alice.mutation(reviseOutput, {
         outputId,
@@ -210,7 +300,9 @@ describe("auth-scoped automation persistence", () => {
         .take(3),
       run: await ctx.db.get("runs", runId),
     }));
-    expect(state.output?.original.body).toBe("AI operations original model output.");
+    expect(state.output?.original.body).toBe(
+      "AI operations original model output.",
+    );
     expect(state.output?.currentRevision).toBe(2);
     expect(state.revisions.map((item) => item.body)).toEqual([
       "AI operations original model output.",
@@ -222,64 +314,175 @@ describe("auth-scoped automation persistence", () => {
   it("persists research evidence and blocks a failed deterministic evaluation", async () => {
     const { alice, t } = await authenticatedTest();
     const profileId = await alice.mutation(createProfile, profileInput);
-    const scheduleId = await alice.mutation(createSchedule, { profileId, name: "Daily", cadence: "daily", timezone: "America/Toronto", localTime: "09:30" });
-    const runId = await alice.mutation(runNow, { scheduleId, requestId: "manual-harness-result-01" });
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Daily",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-harness-result-01",
+    });
     const evidenceId = "ev_0123456789abcdef";
-    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
-    const runner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const runner = await alice.mutation(provisionRunner, {
+      label: "Harness runner",
+    });
     const harnessRequest = "harness-request-blocked-01";
-    await t.mutation(claimQueued, { registrationId: runner.registrationId, userId, runnerId: runner.runnerId, requestId: harnessRequest, now: Date.now() });
+    await t.mutation(claimQueued, {
+      registrationId: runner.registrationId,
+      userId,
+      runnerId: runner.runnerId,
+      requestId: harnessRequest,
+      now: Date.now(),
+    });
     const result = await t.mutation(saveHarnessResult, {
-      userId, runnerRegistrationId: runner.registrationId, executionRequestId: harnessRequest,
+      userId,
+      runnerRegistrationId: runner.registrationId,
+      executionRequestId: harnessRequest,
       runId,
       executionJson: JSON.stringify({
         research: {
-          responseId: "resp_research", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+          responseId: "resp_research",
+          requestedModel: "gpt-5.6-terra",
+          actualModel: "gpt-5.6-terra",
           brief: "AI operations evidence.",
-          evidence: [{ id: evidenceId, url: "https://openai.com/news", title: "OpenAI news", domain: "openai.com", retrievedAt: Date.now(), publishedAt: null, contentHash: "a".repeat(64) }],
-          queries: ["AI operations"], toolCalls: 1,
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }, latencyMs: 20, requestId: "req_research",
+          evidence: [
+            {
+              id: evidenceId,
+              url: "https://openai.com/news",
+              title: "OpenAI news",
+              domain: "openai.com",
+              retrievedAt: Date.now(),
+              publishedAt: null,
+              contentHash: "a".repeat(64),
+            },
+          ],
+          queries: ["AI operations"],
+          toolCalls: 1,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          latencyMs: 20,
+          requestId: "req_research",
         },
         composition: {
-          responseId: "resp_compose", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
-          output: { body: "AI operations unsupported claims evidence.", assumptions: [], riskFlags: [], sourceMap: [{ claim: "AI operations unsupported claims evidence.", evidenceIds: [evidenceId] }] },
-          usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 }, latencyMs: 30, requestId: "req_compose",
+          responseId: "resp_compose",
+          requestedModel: "gpt-5.6-terra",
+          actualModel: "gpt-5.6-terra",
+          output: {
+            body: "AI operations unsupported claims evidence.",
+            assumptions: [],
+            riskFlags: [],
+            sourceMap: [
+              {
+                claim: "AI operations unsupported claims evidence.",
+                evidenceIds: [evidenceId],
+              },
+            ],
+          },
+          usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 },
+          latencyMs: 30,
+          requestId: "req_compose",
         },
-        evaluation: { state: "blocked", codes: ["EXCLUSION_VIOLATION"], warnings: ["FRESHNESS_UNVERIFIED"], duplicateScore: 0, citedEvidenceIds: [evidenceId] },
+        evaluation: {
+          state: "blocked",
+          codes: ["EXCLUSION_VIOLATION"],
+          warnings: ["FRESHNESS_UNVERIFIED"],
+          duplicateScore: 0,
+          citedEvidenceIds: [evidenceId],
+        },
       }),
     });
     expect(result.state).toBe("blocked");
     const persisted = await t.run(async (ctx) => ({
       run: await ctx.db.get("runs", runId),
-      tools: await ctx.db.query("toolExecutions").withIndex("by_runId", (q) => q.eq("runId", runId)).take(2),
-      evidence: await ctx.db.query("evidenceItems").withIndex("by_runId", (q) => q.eq("runId", runId)).take(2),
-      evaluation: await ctx.db.query("evaluations").withIndex("by_runId", (q) => q.eq("runId", runId)).unique(),
+      tools: await ctx.db
+        .query("toolExecutions")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .take(2),
+      evidence: await ctx.db
+        .query("evidenceItems")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .take(2),
+      evaluation: await ctx.db
+        .query("evaluations")
+        .withIndex("by_runId", (q) => q.eq("runId", runId))
+        .unique(),
     }));
     expect(persisted.run?.state).toBe("blocked");
-    expect(persisted.tools[0]).toMatchObject({ tool: "web_search", totalTokens: 15 });
+    expect(persisted.tools[0]).toMatchObject({
+      tool: "web_search",
+      totalTokens: 15,
+    });
     expect(persisted.evidence[0]).toMatchObject({ evidenceId });
     expect(persisted.evidence[0]).not.toHaveProperty("publishedAt");
-    expect(persisted.evaluation).toMatchObject({ codes: ["EXCLUSION_VIOLATION"], warnings: ["FRESHNESS_UNVERIFIED"] });
+    expect(persisted.evaluation).toMatchObject({
+      codes: ["EXCLUSION_VIOLATION"],
+      warnings: ["FRESHNESS_UNVERIFIED"],
+    });
   });
 
   it("rejects stale approval after an output edit", async () => {
     const { alice, t } = await authenticatedTest();
     const profileId = await alice.mutation(createProfile, profileInput);
-    const scheduleId = await alice.mutation(createSchedule, { profileId, name: "Daily signal", cadence: "daily", timezone: "America/Toronto", localTime: "09:30" });
-    const runId = await alice.mutation(runNow, { scheduleId, requestId: "manual-request-approval-01" });
-    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
-    const runner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const scheduleId = await alice.mutation(createSchedule, {
+      profileId,
+      name: "Daily signal",
+      cadence: "daily",
+      timezone: "America/Toronto",
+      localTime: "09:30",
+    });
+    const runId = await alice.mutation(runNow, {
+      scheduleId,
+      requestId: "manual-request-approval-01",
+    });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const runner = await alice.mutation(provisionRunner, {
+      label: "Harness runner",
+    });
     const harnessRequest = "harness-request-stale-01";
-    await t.mutation(claimQueued, { registrationId: runner.registrationId, userId, runnerId: runner.runnerId, requestId: harnessRequest, now: Date.now() });
-    const outputId = (await t.mutation(saveHarnessResult, {
-      userId, runId, runnerRegistrationId: runner.registrationId, executionRequestId: harnessRequest,
-      executionJson: harnessJson("AI operations original."),
-    })).outputId;
-    const original = await t.run(async (ctx) => await ctx.db.query("outputRevisions").withIndex("by_outputId_and_revision", (q) => q.eq("outputId", outputId).eq("revision", 1)).unique());
+    await t.mutation(claimQueued, {
+      registrationId: runner.registrationId,
+      userId,
+      runnerId: runner.runnerId,
+      requestId: harnessRequest,
+      now: Date.now(),
+    });
+    const outputId = (
+      await t.mutation(saveHarnessResult, {
+        userId,
+        runId,
+        runnerRegistrationId: runner.registrationId,
+        executionRequestId: harnessRequest,
+        executionJson: harnessJson("AI operations original."),
+      })
+    ).outputId;
+    const original = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("outputRevisions")
+          .withIndex("by_outputId_and_revision", (q) =>
+            q.eq("outputId", outputId).eq("revision", 1),
+          )
+          .unique(),
+    );
     await alice.mutation(reviseOutput, { outputId, body: "Edited." });
-    await expect(alice.mutation(decideApproval, {
-      runId, outputId, revision: 1, bodyHash: original!.bodyHash, destinationUrl: profileInput.destination.feedUrl, expiresAt: Date.now() + 60_000, decision: "approved",
-    })).rejects.toThrow("APPROVAL_STALE");
+    await expect(
+      alice.mutation(decideApproval, {
+        runId,
+        outputId,
+        revision: 1,
+        bodyHash: original!.bodyHash,
+        destinationUrl: profileInput.destination.feedUrl,
+        expiresAt: Date.now() + 60_000,
+        decision: "approved",
+      }),
+    ).rejects.toThrow("APPROVAL_STALE");
   });
 
   it("records terminal evidence only against the exact approved revision", async () => {
@@ -296,21 +499,37 @@ describe("auth-scoped automation persistence", () => {
       scheduleId,
       requestId: "manual-request-receipt-01",
     });
-    const ownerId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
-    const harnessRunner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const ownerId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const harnessRunner = await alice.mutation(provisionRunner, {
+      label: "Harness runner",
+    });
     const harnessRequest = "harness-request-receipt-01";
-    await t.mutation(claimQueued, { registrationId: harnessRunner.registrationId, userId: ownerId, runnerId: harnessRunner.runnerId, requestId: harnessRequest, now: Date.now() });
-    const outputId = (await t.mutation(saveHarnessResult, {
-      userId: ownerId, runId, runnerRegistrationId: harnessRunner.registrationId, executionRequestId: harnessRequest,
-      executionJson: harnessJson("AI operations approved body."),
-    })).outputId;
-    const revision = await t.run(async (ctx) =>
-      await ctx.db
-        .query("outputRevisions")
-        .withIndex("by_outputId_and_revision", (q) =>
-          q.eq("outputId", outputId).eq("revision", 1),
-        )
-        .unique(),
+    await t.mutation(claimQueued, {
+      registrationId: harnessRunner.registrationId,
+      userId: ownerId,
+      runnerId: harnessRunner.runnerId,
+      requestId: harnessRequest,
+      now: Date.now(),
+    });
+    const outputId = (
+      await t.mutation(saveHarnessResult, {
+        userId: ownerId,
+        runId,
+        runnerRegistrationId: harnessRunner.registrationId,
+        executionRequestId: harnessRequest,
+        executionJson: harnessJson("AI operations approved body."),
+      })
+    ).outputId;
+    const revision = await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("outputRevisions")
+          .withIndex("by_outputId_and_revision", (q) =>
+            q.eq("outputId", outputId).eq("revision", 1),
+          )
+          .unique(),
     );
     const approvalId = await alice.mutation(decideApproval, {
       runId,
@@ -321,9 +540,12 @@ describe("auth-scoped automation persistence", () => {
       expiresAt: Date.now() + 60_000,
       decision: "approved",
     });
-    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!
-      .userId;
-    const provisioned = await alice.mutation(provisionRunner, { label: "Test runner" });
+    const userId = (await t.run(
+      async (ctx) => await ctx.db.get("runs", runId),
+    ))!.userId;
+    const provisioned = await alice.mutation(provisionRunner, {
+      label: "Test runner",
+    });
     const { runnerId, registrationId } = provisioned;
     const listedRunners = await alice.query(listRunners, {});
     expect(listedRunners).toHaveLength(2);
@@ -339,13 +561,15 @@ describe("auth-scoped automation persistence", () => {
       now: Date.now(),
     });
     expect(claim).toMatchObject({ runId, approvalId });
-    expect(await t.mutation(claimApproved, {
-      registrationId,
-      userId,
-      runnerId,
-      requestId: executionRequestId,
-      now: Date.now(),
-    })).toEqual(claim);
+    expect(
+      await t.mutation(claimApproved, {
+        registrationId,
+        userId,
+        runnerId,
+        requestId: executionRequestId,
+        now: Date.now(),
+      }),
+    ).toEqual(claim);
     await expect(
       t.mutation(recordReceipt, {
         userId,
@@ -401,15 +625,19 @@ describe("auth-scoped automation persistence", () => {
       turns: 2,
       actionsExecuted: 3,
     });
-    expect(await t.mutation(claimApproved, {
-      registrationId,
-      userId,
-      runnerId,
-      requestId: executionRequestId,
-      now: Date.now(),
-    })).toBeNull();
+    expect(
+      await t.mutation(claimApproved, {
+        registrationId,
+        userId,
+        runnerId,
+        requestId: executionRequestId,
+        now: Date.now(),
+      }),
+    ).toBeNull();
     await alice.mutation(setOutputArchived, { outputId, archived: true });
-    const output = await t.run(async (ctx) => await ctx.db.get("outputs", outputId));
+    const output = await t.run(
+      async (ctx) => await ctx.db.get("outputs", outputId),
+    );
     await expect(
       alice.mutation(purgeOutput, {
         outputId,
@@ -424,17 +652,47 @@ function harnessJson(body: string) {
   const retrievedAt = Date.now();
   return JSON.stringify({
     research: {
-      responseId: "resp_research", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+      responseId: "resp_research",
+      requestedModel: "gpt-5.6-terra",
+      actualModel: "gpt-5.6-terra",
       brief: "Grounded evidence.",
-      evidence: [{ id: evidenceId, url: "https://openai.com/news", title: "OpenAI news", domain: "openai.com", retrievedAt, publishedAt: retrievedAt, contentHash: "a".repeat(64) }],
-      queries: ["AI operations"], toolCalls: 1,
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, latencyMs: 10, requestId: "req_research",
+      evidence: [
+        {
+          id: evidenceId,
+          url: "https://openai.com/news",
+          title: "OpenAI news",
+          domain: "openai.com",
+          retrievedAt,
+          publishedAt: retrievedAt,
+          contentHash: "a".repeat(64),
+        },
+      ],
+      queries: ["AI operations"],
+      toolCalls: 1,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      latencyMs: 10,
+      requestId: "req_research",
     },
     composition: {
-      responseId: "resp_test", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
-      output: { body, assumptions: [], riskFlags: [], sourceMap: [{ claim: body, evidenceIds: [evidenceId] }] },
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, latencyMs: 10, requestId: "req_test",
+      responseId: "resp_test",
+      requestedModel: "gpt-5.6-terra",
+      actualModel: "gpt-5.6-terra",
+      output: {
+        body,
+        assumptions: [],
+        riskFlags: [],
+        sourceMap: [{ claim: body, evidenceIds: [evidenceId] }],
+      },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      latencyMs: 10,
+      requestId: "req_test",
     },
-    evaluation: { state: "passed", codes: [], warnings: [], duplicateScore: 0, citedEvidenceIds: [evidenceId] },
+    evaluation: {
+      state: "passed",
+      codes: [],
+      warnings: [],
+      duplicateScore: 0,
+      citedEvidenceIds: [evidenceId],
+    },
   });
 }

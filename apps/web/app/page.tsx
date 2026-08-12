@@ -177,9 +177,12 @@ function SignedIn() {
       </p>
       <div className="signed-in-actions">
         <Button asChild className="primary-action">
-          <Link href="/onboarding">
-            Open onboarding <ArrowRight size={17} />
+          <Link href="/app">
+            Open operator desk <ArrowRight size={17} />
           </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/onboarding">Resume onboarding</Link>
         </Button>
         <Button variant="outline" onClick={() => void signOut()}>
           Sign out
