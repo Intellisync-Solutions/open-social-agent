@@ -7,6 +7,8 @@ import {
 import OpenAI from "openai";
 import { z } from "zod";
 
+export * from "./computer";
+
 export const modelPresets = modelPresetPolicies;
 
 export interface ProviderAdapter {

@@ -83,11 +83,15 @@ would send, post, submit, or represent the user to a third party.
   archive/restore/purge
 - Exact revision-and-destination approval records, stale-edit invalidation,
   isolated-profile/domain/action guards, and internal terminal receipt contracts
+- Bounded OpenAI computer-call iteration with ordered action batches, fresh
+  screenshots, blocked safety confirmations, and a controlled isolated-browser
+  proof using a synthetic provider client
 
 Automatic cron activation, provider-backed web research, OpenAI computer-tool
-iteration, and real-account publication verification remain planned. OpenAI
-structured composition is verified for Luna with search disabled; the approval
-and browser corridor is deterministic and locally dry-run only.
+live-provider verification, runner approval claiming, and real-account
+publication verification remain planned. OpenAI structured composition is
+verified for Luna with search disabled; the computer loop is deterministic and
+locally dry-run only.
 
 ### Deferred
 

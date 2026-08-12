@@ -62,9 +62,33 @@ describe("browser publication corridor", () => {
     expect(() =>
       validateBrowserAction(
         { type: "type", text: "changed text" },
-        { allowedDestinationUrl: "https://social.example/feed/acme", approvedBody: "approved text" },
+        {
+          allowedDestinationUrl: "https://social.example/feed/acme",
+          approvedBody: "approved text",
+          viewport: { width: 1280, height: 720 },
+        },
       ),
     ).toThrow("APPROVAL_CONTENT_MISMATCH");
+  });
+
+  it("rejects out-of-bounds coordinates and unsupported modifiers", () => {
+    const policy = {
+      allowedDestinationUrl: "https://social.example/feed/acme",
+      approvedBody: "approved text",
+      viewport: { width: 1280, height: 720 },
+    };
+    expect(() =>
+      validateBrowserAction(
+        { type: "click", x: 1280, y: 50, button: "left" },
+        policy,
+      ),
+    ).toThrow("COMPUTER_COORDINATE_OUT_OF_BOUNDS");
+    expect(() =>
+      validateBrowserAction(
+        { type: "click", x: 100, y: 50, button: "left", keys: ["CTRL"] },
+        policy,
+      ),
+    ).toThrow("COMPUTER_MODIFIERS_UNSUPPORTED");
   });
 
   it("requires direct detail URL and body evidence for live", () => {

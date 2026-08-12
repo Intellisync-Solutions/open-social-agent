@@ -47,12 +47,15 @@ the user's control of the public action.
   original outputs, editable revisions, and usage capture
 - exact approval binding plus isolated-profile, domain, action, and direct-detail
   receipt guards verified on a controlled local browser fixture
+- bounded OpenAI computer-call iteration with ordered actions, fresh screenshots,
+  blocked safety confirmations, and a synthetic-provider isolated-browser proof
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Provider-backed research, automatic cron activation, OpenAI computer-tool
-iteration, real-account browser authorization, and posting remain incomplete.
-Luna structured composition has a guarded local verification; Terra, Sol,
-search, computer use, and real social publication remain unverified.
+Provider-backed research, automatic cron activation, runner approval claiming,
+live-provider computer use, real-account browser authorization, and posting
+remain incomplete. Luna structured composition has a guarded local verification;
+Terra, Sol, search, live computer use, and real social publication remain
+unverified.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
 implemented/planned boundary.
 

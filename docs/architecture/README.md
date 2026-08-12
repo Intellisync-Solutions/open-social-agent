@@ -41,6 +41,11 @@ execution, history, approval, or receipt layers as shipped.
   exact approved-body typing, and direct-detail verification states
 - `convex`: publication receipts are internal-only terminal evidence; clients
   cannot manufacture `live`
+- `packages/providers`: bounded OpenAI computer-call loop with ordered actions,
+  stateless screenshot continuation, complete response-item replay, usage
+  aggregation, and fail-closed safety checks
+- `packages/browser`: normalized computer actions executed in an isolated,
+  environment-cleared browser with viewport, destination, and content guards
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -78,9 +83,9 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is runner claiming plus bounded provider-backed research,
-evaluation, and OpenAI computer-tool iteration over the implemented browser
-corridor. Automatic cron remains disabled until that end-to-end path exists.
-Luna structured output and the local controlled browser corridor are verified;
-Terra, Sol, search, alternate providers, computer use, and real social accounts
-remain unverified.
+The next slice is a trusted runner claim/approval bridge plus bounded
+provider-backed research and evaluation. Automatic cron remains disabled until
+that end-to-end path exists. Luna structured output and the synthetic-provider
+computer loop over a controlled browser are locally verified; Terra, Sol,
+search, alternate providers, live-provider computer use, and real social
+accounts remain unverified.

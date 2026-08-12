@@ -91,5 +91,24 @@ The executable path is intentionally required rather than guessed for this
 test. A passing `externalWrite: false` result is controlled development
 evidence only; it is not social publication or production proof.
 
+## Controlled computer-loop dry run
+
+The runner also has an opt-in proof for the complete Responses computer-call
+protocol using a synthetic in-process provider client. The client returns a
+screenshot-first turn, a bounded action batch, and completion. The production
+loop code executes those actions in a fresh app-owned profile and returns fresh
+screenshots between turns, but makes no provider network call.
+
+```bash
+RUN_COMPUTER_LOOP_DRY_RUN=1 \
+OSA_TEST_BROWSER_EXECUTABLE='/absolute/path/to/a/Playwright-compatible/browser' \
+pnpm --filter @open-social-agent/runner verify:computer-loop
+```
+
+Expected evidence includes `directDetail: true`, `isolatedProfile: true`,
+`providerNetworkCall: false`, and `externalWrite: false`. Any provider
+`pending_safety_checks` value blocks before execution and is never automatically
+acknowledged.
+
 Do not put provider keys in environment examples, command history, logs, issue
 reports, screenshots, or Convex.
