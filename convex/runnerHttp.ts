@@ -1,5 +1,7 @@
 import {
   RunnerClaimRequestSchema,
+  RunnerHarnessClaimRequestSchema,
+  RunnerHarnessReceiptRequestSchema,
   RunnerDeviceTokenSchema,
   RunnerReceiptRequestSchema,
 } from "@open-social-agent/contracts";
@@ -28,6 +30,53 @@ export const claim = httpAction(async (ctx, request) => {
     return new Response(JSON.stringify(claim), { status: 200, headers: responseHeaders });
   } catch {
     return error(409, "RUNNER_CLAIM_REJECTED");
+  }
+});
+
+export const claimHarness = httpAction(async (ctx, request) => {
+  const parsed = RunnerHarnessClaimRequestSchema.safeParse(await boundedJson(request));
+  if (!parsed.success) return error(400, "HARNESS_CLAIM_INVALID");
+  const authority = await authorize(ctx, request, parsed.data.runnerId);
+  if (!authority) return error(401, "RUNNER_AUTH_INVALID");
+  try {
+    const claim = await ctx.runMutation(internal.runners.claimQueuedInternal, {
+      ...authority, runnerId: parsed.data.runnerId, requestId: parsed.data.requestId, now: Date.now(),
+    });
+    if (!claim) return new Response(null, { status: 204, headers: responseHeaders });
+    return new Response(JSON.stringify({
+      ...claim,
+      snapshot: JSON.parse(claim.snapshotJson),
+      snapshotJson: undefined,
+    }), { status: 200, headers: responseHeaders });
+  } catch {
+    return error(409, "HARNESS_CLAIM_REJECTED");
+  }
+});
+
+export const receiptHarness = httpAction(async (ctx, request) => {
+  const parsed = RunnerHarnessReceiptRequestSchema.safeParse(await boundedJson(request, 200_000));
+  if (!parsed.success) return error(400, "HARNESS_RECEIPT_INVALID");
+  const authority = await authorize(ctx, request, parsed.data.runnerId);
+  if (!authority) return error(401, "RUNNER_AUTH_INVALID");
+  try {
+    const args = {
+      userId: authority.userId,
+      runnerRegistrationId: authority.registrationId,
+      runId: parsed.data.runId as never,
+      executionRequestId: parsed.data.executionRequestId,
+    };
+    if (parsed.data.state === "completed") {
+      const result = await ctx.runMutation(internal.outputs.saveHarnessResultInternal, {
+        ...args, executionJson: JSON.stringify(parsed.data.result),
+      });
+      return new Response(JSON.stringify(result), { status: 201, headers: responseHeaders });
+    }
+    await ctx.runMutation(internal.outputs.failHarnessInternal, {
+      ...args, errorCode: parsed.data.errorCode,
+    });
+    return new Response(null, { status: 204, headers: responseHeaders });
+  } catch {
+    return error(409, "HARNESS_RECEIPT_REJECTED");
   }
 });
 
@@ -79,11 +128,11 @@ async function authorize(
   });
 }
 
-async function boundedJson(request: Request): Promise<unknown> {
+async function boundedJson(request: Request, maximum = 32_768): Promise<unknown> {
   const length = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(length) && length > 32_768) return null;
+  if (Number.isFinite(length) && length > maximum) return null;
   const text = await request.text();
-  if (text.length > 32_768) return null;
+  if (text.length > maximum) return null;
   try {
     return JSON.parse(text);
   } catch {

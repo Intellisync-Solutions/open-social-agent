@@ -32,7 +32,7 @@ export const ContentPolicySchema = z.object({
 
 export const ResearchPolicySchema = z.object({
   webSearchEnabled: z.boolean(),
-  allowedDomains: z.array(boundedText(253)).max(50),
+  allowedDomains: z.array(z.string().trim().toLowerCase().regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/)).max(50),
   citationsRequired: z.boolean(),
   freshnessDays: z.number().int().min(1).max(365),
   maxSources: z.number().int().min(1).max(20),
@@ -108,10 +108,45 @@ export const DraftOutputSchema = z.object({
     .array(
       z.object({
         claim: z.string().trim().min(1).max(500),
-        sourceUrls: z.array(z.string().url()).max(8),
+        evidenceIds: z.array(z.string().regex(/^ev_[a-f0-9]{16}$/)).min(1).max(8),
       }),
     )
     .max(30),
+});
+
+export const EvidenceItemSchema = z.object({
+  id: z.string().regex(/^ev_[a-f0-9]{16}$/),
+  url: z.string().url(),
+  title: z.string().trim().min(1).max(500),
+  domain: z.string().min(1).max(253),
+  retrievedAt: z.number().int().nonnegative(),
+  publishedAt: z.number().int().nonnegative().nullable(),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
+export const ResearchExecutionResultSchema = z.object({
+  responseId: z.string().min(1).max(200),
+  requestedModel: z.string().min(1).max(120),
+  actualModel: z.string().min(1).max(120),
+  brief: z.string().trim().min(1).max(32_000),
+  evidence: z.array(EvidenceItemSchema).max(20),
+  queries: z.array(z.string().trim().min(1).max(500)).max(20),
+  toolCalls: z.number().int().nonnegative().max(50),
+  usage: z.object({
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+  }),
+  latencyMs: z.number().int().nonnegative(),
+  requestId: z.string().max(200).nullable(),
+});
+
+export const DraftEvaluationSchema = z.object({
+  state: z.enum(["passed", "blocked"]),
+  codes: z.array(z.string().regex(/^[A-Z0-9_]+$/)).max(20),
+  warnings: z.array(z.string().regex(/^[A-Z0-9_]+$/)).max(20),
+  duplicateScore: z.number().min(0).max(1),
+  citedEvidenceIds: z.array(z.string().regex(/^ev_[a-f0-9]{16}$/)).max(100),
 });
 
 export const ProviderExecutionResultSchema = z.object({
@@ -126,6 +161,12 @@ export const ProviderExecutionResultSchema = z.object({
   }),
   latencyMs: z.number().int().nonnegative(),
   requestId: z.string().max(200).nullable(),
+});
+
+export const HarnessExecutionResultSchema = z.object({
+  research: ResearchExecutionResultSchema.nullable(),
+  composition: ProviderExecutionResultSchema,
+  evaluation: DraftEvaluationSchema,
 });
 
 export const ApprovalDecisionInputSchema = z.object({
@@ -226,11 +267,6 @@ export const RunnerPublicationEvidenceSchema = z.object({
   traceId: z.string().min(1).max(200),
 });
 
-export const RunnerComposeInputSchema = z.object({
-  snapshot: z.lazy(() => ConfigurationSnapshotSchema),
-  evidencePacket: z.string().max(64_000),
-});
-
 export const ConfigurationSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
   profileRevision: z.number().int().positive(),
@@ -248,6 +284,10 @@ export type DraftOutput = z.infer<typeof DraftOutputSchema>;
 export type ProviderExecutionResult = z.infer<
   typeof ProviderExecutionResultSchema
 >;
+export type EvidenceItem = z.infer<typeof EvidenceItemSchema>;
+export type ResearchExecutionResult = z.infer<typeof ResearchExecutionResultSchema>;
+export type DraftEvaluation = z.infer<typeof DraftEvaluationSchema>;
+export type HarnessExecutionResult = z.infer<typeof HarnessExecutionResultSchema>;
 export type ComputerAction = z.infer<typeof ComputerActionSchema>;
 export type ComputerSafetyCheck = z.infer<typeof ComputerSafetyCheckSchema>;
 export type ConfigurationSnapshot = z.infer<

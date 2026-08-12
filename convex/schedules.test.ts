@@ -55,9 +55,7 @@ const enqueueDue = makeFunctionReference<
 const listProfiles = makeFunctionReference<"query">(
   "automationProfiles:listMine",
 );
-const saveModelResult = makeFunctionReference<"mutation">(
-  "outputs:saveModelResultMine",
-);
+const saveHarnessResult = makeFunctionReference<"mutation">("outputs:saveHarnessResultInternal");
 const reviseOutput = makeFunctionReference<"mutation">("outputs:reviseMine");
 const setOutputArchived = makeFunctionReference<"mutation">(
   "outputs:setArchivedMine",
@@ -72,6 +70,7 @@ const listRunners = makeFunctionReference<"query">("runners:listMine");
 const claimApproved = makeFunctionReference<"mutation">(
   "runners:claimApprovedInternal",
 );
+const claimQueued = makeFunctionReference<"mutation">("runners:claimQueuedInternal");
 
 async function authenticatedTest() {
   const t = convexTest(schema, modules);
@@ -187,23 +186,14 @@ describe("auth-scoped automation persistence", () => {
       scheduleId,
       requestId: "manual-request-output-0001",
     });
-    const outputId = await alice.mutation(saveModelResult, {
-      runId,
-      executionJson: JSON.stringify({
-        responseId: "resp_test",
-        requestedModel: "gpt-5.6-terra",
-        actualModel: "gpt-5.6-terra",
-        output: {
-          body: "Original model output.",
-          assumptions: [],
-          riskFlags: [],
-          sourceMap: [],
-        },
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-        latencyMs: 25,
-        requestId: "req_test",
-      }),
-    });
+    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
+    const runner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const harnessRequest = "harness-request-output-01";
+    await t.mutation(claimQueued, { registrationId: runner.registrationId, userId, runnerId: runner.runnerId, requestId: harnessRequest, now: Date.now() });
+    const outputId = (await t.mutation(saveHarnessResult, {
+      userId, runId, runnerRegistrationId: runner.registrationId, executionRequestId: harnessRequest,
+      executionJson: harnessJson("AI operations original model output."),
+    })).outputId;
     expect(
       await alice.mutation(reviseOutput, {
         outputId,
@@ -220,13 +210,56 @@ describe("auth-scoped automation persistence", () => {
         .take(3),
       run: await ctx.db.get("runs", runId),
     }));
-    expect(state.output?.original.body).toBe("Original model output.");
+    expect(state.output?.original.body).toBe("AI operations original model output.");
     expect(state.output?.currentRevision).toBe(2);
     expect(state.revisions.map((item) => item.body)).toEqual([
-      "Original model output.",
+      "AI operations original model output.",
       "User-edited revision.",
     ]);
     expect(state.run?.state).toBe("awaiting_approval");
+  });
+
+  it("persists research evidence and blocks a failed deterministic evaluation", async () => {
+    const { alice, t } = await authenticatedTest();
+    const profileId = await alice.mutation(createProfile, profileInput);
+    const scheduleId = await alice.mutation(createSchedule, { profileId, name: "Daily", cadence: "daily", timezone: "America/Toronto", localTime: "09:30" });
+    const runId = await alice.mutation(runNow, { scheduleId, requestId: "manual-harness-result-01" });
+    const evidenceId = "ev_0123456789abcdef";
+    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
+    const runner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const harnessRequest = "harness-request-blocked-01";
+    await t.mutation(claimQueued, { registrationId: runner.registrationId, userId, runnerId: runner.runnerId, requestId: harnessRequest, now: Date.now() });
+    const result = await t.mutation(saveHarnessResult, {
+      userId, runnerRegistrationId: runner.registrationId, executionRequestId: harnessRequest,
+      runId,
+      executionJson: JSON.stringify({
+        research: {
+          responseId: "resp_research", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+          brief: "AI operations evidence.",
+          evidence: [{ id: evidenceId, url: "https://openai.com/news", title: "OpenAI news", domain: "openai.com", retrievedAt: Date.now(), publishedAt: null, contentHash: "a".repeat(64) }],
+          queries: ["AI operations"], toolCalls: 1,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 }, latencyMs: 20, requestId: "req_research",
+        },
+        composition: {
+          responseId: "resp_compose", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+          output: { body: "AI operations unsupported claims evidence.", assumptions: [], riskFlags: [], sourceMap: [{ claim: "AI operations unsupported claims evidence.", evidenceIds: [evidenceId] }] },
+          usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 }, latencyMs: 30, requestId: "req_compose",
+        },
+        evaluation: { state: "blocked", codes: ["EXCLUSION_VIOLATION"], warnings: ["FRESHNESS_UNVERIFIED"], duplicateScore: 0, citedEvidenceIds: [evidenceId] },
+      }),
+    });
+    expect(result.state).toBe("blocked");
+    const persisted = await t.run(async (ctx) => ({
+      run: await ctx.db.get("runs", runId),
+      tools: await ctx.db.query("toolExecutions").withIndex("by_runId", (q) => q.eq("runId", runId)).take(2),
+      evidence: await ctx.db.query("evidenceItems").withIndex("by_runId", (q) => q.eq("runId", runId)).take(2),
+      evaluation: await ctx.db.query("evaluations").withIndex("by_runId", (q) => q.eq("runId", runId)).unique(),
+    }));
+    expect(persisted.run?.state).toBe("blocked");
+    expect(persisted.tools[0]).toMatchObject({ tool: "web_search", totalTokens: 15 });
+    expect(persisted.evidence[0]).toMatchObject({ evidenceId });
+    expect(persisted.evidence[0]).not.toHaveProperty("publishedAt");
+    expect(persisted.evaluation).toMatchObject({ codes: ["EXCLUSION_VIOLATION"], warnings: ["FRESHNESS_UNVERIFIED"] });
   });
 
   it("rejects stale approval after an output edit", async () => {
@@ -234,10 +267,14 @@ describe("auth-scoped automation persistence", () => {
     const profileId = await alice.mutation(createProfile, profileInput);
     const scheduleId = await alice.mutation(createSchedule, { profileId, name: "Daily signal", cadence: "daily", timezone: "America/Toronto", localTime: "09:30" });
     const runId = await alice.mutation(runNow, { scheduleId, requestId: "manual-request-approval-01" });
-    const outputId = await alice.mutation(saveModelResult, {
-      runId,
-      executionJson: JSON.stringify({ responseId: "resp_test", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra", output: { body: "Original.", assumptions: [], riskFlags: [], sourceMap: [] }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, latencyMs: 10, requestId: "req_test" }),
-    });
+    const userId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
+    const runner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const harnessRequest = "harness-request-stale-01";
+    await t.mutation(claimQueued, { registrationId: runner.registrationId, userId, runnerId: runner.runnerId, requestId: harnessRequest, now: Date.now() });
+    const outputId = (await t.mutation(saveHarnessResult, {
+      userId, runId, runnerRegistrationId: runner.registrationId, executionRequestId: harnessRequest,
+      executionJson: harnessJson("AI operations original."),
+    })).outputId;
     const original = await t.run(async (ctx) => await ctx.db.query("outputRevisions").withIndex("by_outputId_and_revision", (q) => q.eq("outputId", outputId).eq("revision", 1)).unique());
     await alice.mutation(reviseOutput, { outputId, body: "Edited." });
     await expect(alice.mutation(decideApproval, {
@@ -259,23 +296,14 @@ describe("auth-scoped automation persistence", () => {
       scheduleId,
       requestId: "manual-request-receipt-01",
     });
-    const outputId = await alice.mutation(saveModelResult, {
-      runId,
-      executionJson: JSON.stringify({
-        responseId: "resp_test",
-        requestedModel: "gpt-5.6-terra",
-        actualModel: "gpt-5.6-terra",
-        output: {
-          body: "Approved body.",
-          assumptions: [],
-          riskFlags: [],
-          sourceMap: [],
-        },
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        latencyMs: 10,
-        requestId: "req_test",
-      }),
-    });
+    const ownerId = (await t.run(async (ctx) => await ctx.db.get("runs", runId)))!.userId;
+    const harnessRunner = await alice.mutation(provisionRunner, { label: "Harness runner" });
+    const harnessRequest = "harness-request-receipt-01";
+    await t.mutation(claimQueued, { registrationId: harnessRunner.registrationId, userId: ownerId, runnerId: harnessRunner.runnerId, requestId: harnessRequest, now: Date.now() });
+    const outputId = (await t.mutation(saveHarnessResult, {
+      userId: ownerId, runId, runnerRegistrationId: harnessRunner.registrationId, executionRequestId: harnessRequest,
+      executionJson: harnessJson("AI operations approved body."),
+    })).outputId;
     const revision = await t.run(async (ctx) =>
       await ctx.db
         .query("outputRevisions")
@@ -297,9 +325,11 @@ describe("auth-scoped automation persistence", () => {
       .userId;
     const provisioned = await alice.mutation(provisionRunner, { label: "Test runner" });
     const { runnerId, registrationId } = provisioned;
-    expect(await alice.query(listRunners, {})).toEqual([
-      expect.not.objectContaining({ tokenHash: expect.anything() }),
-    ]);
+    const listedRunners = await alice.query(listRunners, {});
+    expect(listedRunners).toHaveLength(2);
+    for (const listed of listedRunners) {
+      expect(listed).not.toHaveProperty("tokenHash");
+    }
     const executionRequestId = "execution-request-0001";
     const claim = await t.mutation(claimApproved, {
       registrationId,
@@ -388,3 +418,23 @@ describe("auth-scoped automation persistence", () => {
     ).rejects.toThrow("OUTPUT_HAS_APPROVAL");
   });
 });
+
+function harnessJson(body: string) {
+  const evidenceId = "ev_0123456789abcdef";
+  const retrievedAt = Date.now();
+  return JSON.stringify({
+    research: {
+      responseId: "resp_research", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+      brief: "Grounded evidence.",
+      evidence: [{ id: evidenceId, url: "https://openai.com/news", title: "OpenAI news", domain: "openai.com", retrievedAt, publishedAt: retrievedAt, contentHash: "a".repeat(64) }],
+      queries: ["AI operations"], toolCalls: 1,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, latencyMs: 10, requestId: "req_research",
+    },
+    composition: {
+      responseId: "resp_test", requestedModel: "gpt-5.6-terra", actualModel: "gpt-5.6-terra",
+      output: { body, assumptions: [], riskFlags: [], sourceMap: [{ claim: body, evidenceIds: [evidenceId] }] },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, latencyMs: 10, requestId: "req_test",
+    },
+    evaluation: { state: "passed", codes: [], warnings: [], duplicateScore: 0, citedEvidenceIds: [evidenceId] },
+  });
+}

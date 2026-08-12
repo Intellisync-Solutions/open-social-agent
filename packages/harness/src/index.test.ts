@@ -2,6 +2,8 @@ import type { ConfigurationSnapshot } from "@open-social-agent/contracts";
 import { describe, expect, it } from "vitest";
 import {
   assertRunTransition,
+  buildEvidencePacket,
+  evaluateDraft,
   planZeroPostRun,
   validateCompositionInput,
 } from "./index";
@@ -88,5 +90,56 @@ describe("governed harness", () => {
     expect(() => validateCompositionInput(snapshot, "")).toThrow(
       "GROUNDING_INSUFFICIENT",
     );
+  });
+
+  it("binds citations to admitted evidence and reports freshness uncertainty", () => {
+    const evidence = [{
+      id: "ev_0123456789abcdef",
+      url: "https://openai.com/news",
+      title: "OpenAI news",
+      domain: "openai.com",
+      retrievedAt: Date.now(),
+      publishedAt: null,
+      contentHash: "a".repeat(64),
+    }];
+    expect(buildEvidencePacket({ brief: "Evidence brief.", evidence })).toContain(evidence[0].id);
+    expect(evaluateDraft({
+      snapshot,
+      output: {
+        body: "AI operations need evidence.",
+        assumptions: [],
+        riskFlags: [],
+        sourceMap: [{ claim: "AI operations need evidence.", evidenceIds: [evidence[0].id] }],
+      },
+      evidence,
+      recentBodies: [],
+    })).toEqual({
+      state: "passed",
+      codes: [],
+      warnings: ["FRESHNESS_UNVERIFIED"],
+      duplicateScore: 0,
+      citedEvidenceIds: [evidence[0].id],
+    });
+  });
+
+  it("blocks hallucinated citations, exclusions, and near-duplicates", () => {
+    const evaluation = evaluateDraft({
+      snapshot,
+      output: {
+        body: "AI operations with unsupported claims need evidence.",
+        assumptions: [],
+        riskFlags: [],
+        sourceMap: [{ claim: "A claim", evidenceIds: ["ev_ffffffffffffffff"] }],
+      },
+      evidence: [],
+      recentBodies: ["AI operations with unsupported claims need evidence."],
+    });
+    expect(evaluation.state).toBe("blocked");
+    expect(evaluation.codes).toEqual(expect.arrayContaining([
+      "CITATION_NOT_ADMITTED",
+      "DUPLICATE_RISK",
+      "EXCLUSION_VIOLATION",
+      "GROUNDING_INSUFFICIENT",
+    ]));
   });
 });

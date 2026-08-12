@@ -102,7 +102,7 @@ export const draftOutput = v.object({
   assumptions: v.array(v.string()),
   riskFlags: v.array(v.string()),
   sourceMap: v.array(
-    v.object({ claim: v.string(), sourceUrls: v.array(v.string()) }),
+    v.object({ claim: v.string(), evidenceIds: v.array(v.string()) }),
   ),
 });
 

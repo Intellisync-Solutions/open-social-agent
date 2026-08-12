@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
+  ConfigurationSnapshotSchema,
   openAIComputerModel,
   RunnerRegistrationInputSchema,
   RunnerRequestIdSchema,
@@ -210,6 +211,64 @@ export const claimApprovedInternal = internalMutation({
     return null;
   },
 });
+
+export const claimQueuedInternal = internalMutation({
+  args: {
+    registrationId: v.id("runnerRegistrations"), userId: v.id("users"),
+    runnerId: v.string(), requestId: v.string(), now: v.number(),
+  },
+  returns: v.union(v.null(), v.object({
+    userId: v.id("users"), registrationId: v.id("runnerRegistrations"),
+    runId: v.id("runs"), executionRequestId: v.string(), leaseExpiresAt: v.number(),
+    snapshotJson: v.string(), recentBodies: v.array(v.string()),
+  })),
+  handler: async (ctx, args) => {
+    if (!RunnerRequestIdSchema.safeParse(args.requestId).success) throw new ConvexError("REQUEST_ID_INVALID");
+    const registration = await ctx.db.get("runnerRegistrations", args.registrationId);
+    if (!registration || registration.userId !== args.userId || registration.runnerId !== args.runnerId || registration.status !== "active") {
+      throw new ConvexError("RUNNER_AUTH_INVALID");
+    }
+    const staleClaims = await ctx.db.query("harnessClaims").withIndex("by_runnerId_and_requestId", (q) => q.eq("runnerId", args.runnerId)).take(20);
+    for (const stale of staleClaims) {
+      if (stale.status !== "claimed" || stale.leaseExpiresAt > args.now) continue;
+      const staleRun = await ctx.db.get("runs", stale.runId);
+      await ctx.db.patch(stale._id, { status: "completed", updatedAt: args.now });
+      if (staleRun?.state === "claimed") {
+        await ctx.db.patch(staleRun._id, { state: "failed", updatedAt: args.now });
+      }
+    }
+    const replay = await ctx.db.query("harnessClaims").withIndex("by_runnerId_and_requestId", (q) => q.eq("runnerId", args.runnerId).eq("requestId", args.requestId)).unique();
+    if (replay) return await harnessClaimPayload(ctx, replay, args.now);
+    const run = (await ctx.db.query("runs").withIndex("by_userId_and_state", (q) => q.eq("userId", args.userId).eq("state", "queued")).order("asc").take(1))[0];
+    if (!run) return null;
+    const existing = await ctx.db.query("harnessClaims").withIndex("by_runId", (q) => q.eq("runId", run._id)).unique();
+    if (existing) return null;
+    const leaseExpiresAt = args.now + 15 * 60 * 1000;
+    const claimId = await ctx.db.insert("harnessClaims", {
+      userId: args.userId, runnerRegistrationId: registration._id, runnerId: args.runnerId,
+      runId: run._id, requestId: args.requestId, leaseExpiresAt, status: "claimed",
+      createdAt: args.now, updatedAt: args.now,
+    });
+    await ctx.db.patch(run._id, { state: "claimed", updatedAt: args.now });
+    await ctx.db.patch(registration._id, { lastSeenAt: args.now, updatedAt: args.now });
+    return await harnessClaimPayload(ctx, (await ctx.db.get("harnessClaims", claimId))!, args.now);
+  },
+});
+
+async function harnessClaimPayload(ctx: MutationCtx, claim: Doc<"harnessClaims">, now: number) {
+  const run = await ctx.db.get("runs", claim.runId);
+  if (claim.status !== "claimed" || claim.leaseExpiresAt <= now || !run || run.state !== "claimed" || run.userId !== claim.userId) return null;
+  let snapshot: unknown;
+  try { snapshot = JSON.parse(run.configurationSnapshotJson); } catch { return null; }
+  const parsed = ConfigurationSnapshotSchema.safeParse(snapshot);
+  if (!parsed.success) return null;
+  const outputs = await ctx.db.query("outputs").withIndex("by_userId_and_status", (q) => q.eq("userId", claim.userId).eq("status", "active")).order("desc").take(20);
+  return {
+    userId: claim.userId, registrationId: claim.runnerRegistrationId, runId: run._id,
+    executionRequestId: claim.requestId, leaseExpiresAt: claim.leaseExpiresAt,
+    snapshotJson: JSON.stringify(parsed.data), recentBodies: outputs.map((output) => output.original.body),
+  };
+}
 
 async function claimPayload(
   ctx: MutationCtx,

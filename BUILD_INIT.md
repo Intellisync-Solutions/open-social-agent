@@ -89,10 +89,12 @@ would send, post, submit, or represent the user to a third party.
 - Revocable runner registrations with hashed device credentials, authenticated
   HTTP claim/receipt bridge, atomic leased execution claims, and an independently
   gated local processing endpoint
+- Leased queued-run harness claims, allowlisted OpenAI web search, deterministic
+  citation/evidence/duplicate gates, and durable research/evaluation evidence
 
-Automatic cron activation, provider-backed web research, OpenAI computer-tool
-live-provider verification, runner polling, and real-account publication
-verification remain planned. OpenAI structured composition is
+Automatic cron activation, OpenAI search/computer live-provider verification,
+runner polling, and real-account publication verification remain planned.
+OpenAI structured composition is
 verified for Luna with search disabled; the computer loop is deterministic and
 locally dry-run only.
 

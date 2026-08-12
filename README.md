@@ -51,13 +51,14 @@ the user's control of the public action.
   blocked safety confirmations, and a synthetic-provider isolated-browser proof
 - revocable hashed-token runner registration plus atomic approval claim and
   claim-bound receipt transport, with local computer processing disabled by default
+- leased queued-run claims for domain-filtered OpenAI web research, citation
+  admission, duplicate/evidence evaluation, and durable tool/evidence receipts
 - deterministic governance, lint, type, test, build, and dry browser checks
 
-Provider-backed research, automatic cron activation, runner polling,
-live-provider computer use, real-account browser authorization, and posting
-remain incomplete. Luna structured composition has a guarded local verification;
-Terra, Sol, search, live computer use, and real social publication remain
-unverified.
+Automatic runner polling, cron activation, live-provider research/computer use,
+real-account browser authorization, and posting remain incomplete. Luna
+structured composition has a guarded local verification; Terra, Sol, live web
+search, live computer use, and real social publication remain unverified.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the exact
 implemented/planned boundary.
 
