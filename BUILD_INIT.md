@@ -71,9 +71,13 @@ would send, post, submit, or represent the user to a third party.
 - Auth-scoped, resumable onboarding draft persistence
 - Shared Zod onboarding contracts that exclude provider secrets
 - Responsive eight-step onboarding interface through configuration review
+- Loopback-only local runner with one-use pairing and bounded sessions
+- OS-keyring provider secret storage with authenticated-encryption fallback
+- Allowlisted browser detection and truthful read-only provider auth probe
 
-Provider secret storage, runner pairing, schedules, harness execution, history
-CRUD, approval, computer use, and publication receipts remain planned.
+Schedules, harness execution, history CRUD, approval, computer use, and
+publication receipts remain planned. Provider generation/tool capabilities
+remain unverified until a guarded test run.
 
 ### Deferred
 

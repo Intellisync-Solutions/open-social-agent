@@ -83,8 +83,9 @@ listing is not proof of publication.
 
 Logs may contain IDs, state transitions, timings, counts, provider/model labels,
 redacted fingerprints, and bounded errors. They must not contain API keys,
-cookies, authorization headers, full screenshots, passwords, one-time codes, or
-unnecessary content.
+cookies, authorization headers, full screenshots, passwords, or unnecessary
+content. A runner pairing code may appear once in its interactive startup
+terminal; it must never enter structured logs, traces, files, or durable data.
 
 Security issues should be reported privately through the repository's GitHub
 security advisory flow once the public repository is created. Do not publish

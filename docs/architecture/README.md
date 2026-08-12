@@ -1,17 +1,17 @@
 # Current Implemented Architecture
 
-Last verified: 2026-08-10
+Last verified: 2026-08-12
 
 ## Current truth
 
-The first product runtime slice is implemented on the `codex/v1-scaffold`
-branch: a governed workspace, authenticated Next.js shell, shared onboarding
-contracts, and auth-scoped resumable onboarding persistence.
+The governed scaffold and local-runner slices are implemented: an authenticated
+Next.js shell, shared onboarding contracts, auth-scoped resumable persistence,
+and a loopback-only local secret and provider-authentication boundary.
 
 `BUILD_INIT.md` has `architecture_status: approved` and
-`implementation_status: partial`. Future contributors must not describe the
-provider secret store, harness, runner, scheduling, browser execution, history,
-approval, or receipt layers as shipped.
+`implementation_status: partial`. Future contributors must not describe harness
+execution, scheduling, isolated browser execution, history, approval, or receipt
+layers as shipped.
 
 ## Implemented seams
 
@@ -19,6 +19,10 @@ approval, or receipt layers as shipped.
 - `packages/contracts`: versioned onboarding schemas and destination-origin rule
 - `convex`: Convex Auth tables plus one auth-scoped onboarding draft per user
 - `scripts/verify-governance.mjs`: deterministic authority/status validation
+- `apps/runner`: loopback-only pairing, secret CRUD, browser detection, and
+  non-generative provider authentication probe
+- `packages/secrets`: OS keyring plus explicit AES-256-GCM fallback
+- `packages/browser`: allowlisted installed-browser detection
 
 The web application fails closed when its Convex URL is absent or invalid. The
 onboarding contract contains provider metadata and a redacted fingerprint field,
@@ -55,6 +59,7 @@ push, HTTP response, click, or feed listing is not proof of a public post.
 
 ## Next gate
 
-The next slice is the local runner pairing and encrypted provider-secret seam,
-followed by truthful capability tests. It must not send a key to Convex, a model,
-browser client code, or logs.
+The next slice is durable model/content/research policies, schedules, immutable
+configuration snapshots, and the governed harness. The provider authentication
+probe is implemented; paid generation capabilities remain unverified until a
+guarded harness test.
